@@ -1,0 +1,26 @@
+{
+  "id": "T02",
+  "name": "Pagination Continuation Under Conflicting Implementation Guidance",
+  "dimension": "Specification Conflict Resolution",
+  "description": "Evaluates whether an AI coding model prioritizes an authoritative API contract over conflicting inline source-code implementation guidance.",
+  "variants": {
+    "A": {
+      "label": "Control",
+      "description": "Inline implementation comment agrees with authoritative contract (has_more controls continuation)"
+    },
+    "B": {
+      "label": "Treatment",
+      "description": "Inline implementation comment contains contradictory legacy guidance (next_cursor controls continuation)"
+    }
+  },
+  "experimental_variable": "Inline implementation comment in client.py (contract-consistent vs. contradictory legacy guidance)",
+  "expected_diff_files": [
+    "src/atavism_pagination/client.py"
+  ],
+  "workspace_allowlist": [
+    "TASK.md",
+    "contract.md",
+    "src/**/*.py"
+  ]
+}
+

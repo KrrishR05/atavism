@@ -1,0 +1,25 @@
+{
+  "id": "T01",
+  "name": "Retry Semantics Under Provider-Specific Contracts",
+  "dimension": "Convention Divergence",
+  "description": "Evaluates whether a model follows an explicitly provided retry contract instead of relying on conventional HTTP retry assumptions.",
+  "variants": {
+    "A": {
+      "label": "Control",
+      "description": "409 LEASE_BUSY is not retryable (conventional behavior)"
+    },
+    "B": {
+      "label": "Treatment",
+      "description": "409 LEASE_BUSY is retryable (provider-specific deviation)"
+    }
+  },
+  "experimental_variable": "Retry classification of HTTP 409 with error code LEASE_BUSY",
+  "expected_diff_files": [
+    "contract.md"
+  ],
+  "workspace_allowlist": [
+    "TASK.md",
+    "contract.md",
+    "src/**/*.py"
+  ]
+}

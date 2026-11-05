@@ -29,10 +29,13 @@ def matches_allowlist(relative_path: str, allowlist: list[str] | None = None) ->
 
 
 def list_workspace_files(workspace_dir: Path) -> list[Path]:
-    """List all files in a workspace directory."""
+    """List all files in a workspace directory, excluding Python bytecode caches."""
     if not workspace_dir.is_dir():
         raise FileNotFoundError(f"Workspace directory not found: {workspace_dir}")
-    return sorted(p for p in workspace_dir.rglob("*") if p.is_file())
+    return sorted(
+        p for p in workspace_dir.rglob("*")
+        if p.is_file() and "__pycache__" not in p.parts and not p.name.endswith(".pyc")
+    )
 
 
 def validate_workspace(

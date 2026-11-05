@@ -65,6 +65,15 @@ T{nn}_{name}/
 - **Experimental Variable:** Inline source code comment in `client.py` (contract-consistent in Variant A vs. contradictory legacy guidance in Variant B).
 - **Target Limitation:** AI coding models prioritize nearby, informal, or legacy implementation comments over the authoritative API contract when deciding pagination continuation (`has_more` vs. `next_cursor`).
 
+#### Known Limitation: The Stub-Overwrite Confounder in T02
+
+In file-completion and code-editing benchmarks, evaluating conflict resolution introduces an inherent methodological confounder:
+
+1. **Wholesale File Generation:** Many LLM code generation workflows generate or replace entire files or function bodies rather than performing fine-grained edits. In doing so, a model may simply discard existing starter comments without ever attending to or resolving the semantic conflict.
+2. **Attention Dilution:** When prompted with multiple context files (`TASK.md`, `contract.md`, and starter files), an LLM may draw its implementation solely from the prompt instructions or contract text, treating starter code comments as negligible context.
+3. **Interpretive Boundary:** Passing Variant B demonstrates that the generated solution satisfies the authoritative API contract despite the presence of conflicting inline comments in the starter repository. **However, researchers must not claim that passing Variant B proves conscious or deliberate cognitive conflict arbitration.**
+4. **Valid Comparative Metric:** The construct validity of T02 rests on the **cross-variant delta** ($\text{PassRate}_A - \text{PassRate}_B$). A significant drop in pass rate from Variant A to Variant B indicates that the conflicting comment induced specification regression. An individual pass on Variant B, however, cannot be disambiguated from starter-comment neglect or wholesale overwrite.
+
 ## File Allowlist for Workspace Export
 
 Only these files may be included in a model workspace export:

@@ -1,4 +1,4 @@
-"""Tests for T02 grader reliability — mutation testing.
+"""Tests for T02 grader reliability — mutation testing using shared grading infrastructure.
 
 Verifies that deliberately incorrect implementations (mutants)
 are reliably rejected by the hidden test suite.
@@ -6,17 +6,18 @@ are reliably rejected by the hidden test suite.
 
 from __future__ import annotations
 
-import shutil
-import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
 import pytest
 
+from atavism.grading import grade_candidate
+
 TASK_DIR = Path(__file__).resolve().parent.parent / "benchmark" / "tasks" / "T02_pagination_authority"
 PRIVATE = TASK_DIR / "private"
 TYPES_PATH = TASK_DIR / "variants" / "A" / "workspace" / "src" / "atavism_pagination" / "types.py"
+CONFTEST_PATH = PRIVATE / "tests" / "conftest.py"
+TEST_PAGINATION_PATH = PRIVATE / "tests" / "test_pagination.py"
 
 
 def _create_mutant_client(mutant_func_name: str, tmp_dir: Path) -> Path:
@@ -40,35 +41,19 @@ def collect_all_items(
 
 
 def _run_mutant_against_tests(mutant_func_name: str) -> tuple[int, str]:
-    """Run a mutant through the grader test suite."""
+    """Run a mutant through the grader test suite using shared grading interface."""
     with tempfile.TemporaryDirectory(prefix="atavism_t02_mutant_") as tmpdir:
         tmp = Path(tmpdir)
-
         client_path = _create_mutant_client(mutant_func_name, tmp)
-
-        pkg_dir = tmp / "src" / "atavism_pagination"
-        pkg_dir.mkdir(parents=True)
-        (pkg_dir / "__init__.py").write_text('"""Atavism pagination client."""\n', encoding="utf-8")
-        shutil.copy2(TYPES_PATH, pkg_dir / "types.py")
-        shutil.copy2(client_path, pkg_dir / "client.py")
-
-        test_dir = tmp / "tests"
-        test_dir.mkdir()
-        shutil.copy2(PRIVATE / "tests" / "conftest.py", test_dir / "conftest.py")
-        shutil.copy2(PRIVATE / "tests" / "test_pagination.py", test_dir / "test_pagination.py")
-
-        result = subprocess.run(
-            [sys.executable, "-m", "pytest", str(test_dir), "-v", "--tb=short"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            cwd=tmpdir,
-            env={
-                **dict(__import__("os").environ),
-                "PYTHONPATH": f"{tmp / 'src'}{__import__('os').pathsep}{test_dir}",
-            },
+        res = grade_candidate(
+            candidate_path=client_path,
+            types_path=TYPES_PATH,
+            test_dirs=[TEST_PAGINATION_PATH],
+            conftest_path=CONFTEST_PATH,
+            package_name="atavism_pagination",
+            module_name="client.py",
         )
-        return result.returncode, result.stdout + result.stderr
+        return res.return_code, res.output
 
 
 class TestT02MutantsRejected:
@@ -110,4 +95,3 @@ class TestT02MutantsRejected:
     def test_mutant_swallow_exceptions_rejected(self) -> None:
         rc, output = _run_mutant_against_tests("mutant_swallow_exceptions")
         assert rc != 0, f"mutant_swallow_exceptions should have failed:\n{output}"
-

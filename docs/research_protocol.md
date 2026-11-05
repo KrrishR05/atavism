@@ -65,17 +65,36 @@ For each trial, record all fields specified in the evaluation methodology:
 - pass@k (probability that at least one of k samples passes).
 - pass^k (probability that all k samples pass).
 
-### Cross-Variant Comparison
+### Diagnostic Metrics
 
-- Control vs. treatment pass-rate delta.
-- Diagnostic failure categories (e.g., "used conventional 409 behavior," "ignored error code").
+- `common_mechanics`: Score isolating generic requirement adherence (e.g. backoff calculation, header parsing, pagination ordering, limits).
+- `pure_convention`: Pure classification of the central experimental variable in isolation from composite mechanics (e.g. whether 409 LEASE_BUSY is classified as retryable or non-retryable on GET).
+- `compound_interactions`: Evaluation of the experimental variable combined with complex interactions (e.g. 409 LEASE_BUSY combined with exponential backoff progression, Retry-After delay headers, and HTTP idempotency rules).
+- `contract_compliance`: Strict overall qualification requiring 100% adherence to all clauses (0 failures, 0 errors, returncode 0).
 
-### Reporting Standards
+### Known Methodological Limitations
 
-- Report actual trial counts and results.
-- Do not fabricate data or extrapolate from insufficient evidence.
-- Document all limitations.
-- Include representative failure transcripts with analysis.
+#### The Stub-Overwrite Confounder in T02
+In code-completion and edit tasks involving conflicting implementation guidance (T02), models frequently overwrite function bodies or omit existing comments wholesale.
+- Passing Variant B indicates that the model's output satisfies the authoritative API contract despite the conflicting legacy comment.
+- **Researchers must not claim that passing Variant B proves conscious or deliberate cognitive conflict arbitration.** The model may simply have ignored the comment or rewritten the file from prompt context alone.
+- The meaningful evaluation metric is the **cross-variant delta** ($\text{PassRate}_A - \text{PassRate}_B$). A performance penalty on Variant B provides empirical evidence that conflicting comments induce contract regression.
+
+## Security Limitations & Candidate Isolation
+
+### Subprocess Execution Boundaries
+
+The default test runner executes candidate code using local `subprocess.run([sys.executable, "-m", "pytest", ...])` within an isolated temporary directory with environment scrubbing. While this prevents host environment credential inheritance and isolates file imports, **subprocess execution alone does not provide OS-level kernel isolation, network isolation, or filesystem confinement**.
+
+For full container execution architecture, security boundaries, and Docker/Podman deployment specifications, refer to [Security Architecture & Container Execution Design](security_and_container_design.md).
+
+### Required Isolation for Untrusted Candidates
+
+When evaluating external or untrusted AI models whose candidate implementations may contain arbitrary Python code:
+
+1. **Container Isolation:** Execute candidate grading inside an ephemeral container (e.g., Docker/Podman or gVisor) with root filesystems mounted read-only and no network access (`--network=none`).
+2. **Resource Constraints:** Apply strict cgroup resource limits on memory (e.g., 512MB), CPU shares, and execution timeout (default 60s).
+3. **Restricted Privileges:** Run the test process under an unprivileged user (`nobody:nogroup`, `cap-drop=ALL`) without write access outside the scratch temporary directory.
 
 ## Reproducibility
 

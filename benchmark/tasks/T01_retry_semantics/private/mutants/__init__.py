@@ -6,9 +6,39 @@ catches it. Named by the defect they embody.
 
 from __future__ import annotations
 
+import math
+
 from atavism_retry.types import Clock, Request, Response, RetryPolicy, Sleeper, Transport
 
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def _compute_backoff_safe(retry_number: int, policy: RetryPolicy) -> float:
+    exp = retry_number - 1
+    if exp <= 0:
+        return min(policy.base_delay, policy.max_backoff)
+    if policy.base_delay <= 0.0 or policy.max_backoff <= 0.0:
+        return 0.0
+    if policy.base_delay >= policy.max_backoff:
+        return policy.max_backoff
+    try:
+        ratio = policy.max_backoff / policy.base_delay
+        if ratio <= 0.0 or exp >= math.log2(ratio):
+            return policy.max_backoff
+        return min(policy.base_delay * (2.0 ** exp), policy.max_backoff)
+    except (OverflowError, ValueError):
+        return policy.max_backoff
+
+
+def _parse_retry_after_safe(response: Response) -> float | None:
+    raw = response.headers.get("Retry-After")
+    if raw is None:
+        return None
+    stripped = raw.strip()
+    if not stripped or not stripped.isdigit() or str(int(stripped)) != stripped:
+        return None
+    val = int(stripped)
+    return float(val) if val >= 0 else None
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +73,8 @@ def mutant_retry_all_errors(
                 return response
 
         retry_number = attempt
-        delay = min(policy.base_delay * (2 ** (retry_number - 1)), policy.max_backoff)
+        ra = _parse_retry_after_safe(response)
+        delay = ra if ra is not None else _compute_backoff_safe(retry_number, policy)
 
         now = clock()
         if now + delay >= deadline:
@@ -89,7 +120,8 @@ def mutant_ignore_error_code(
                 return response
 
         retry_number = attempt
-        delay = min(policy.base_delay * (2 ** (retry_number - 1)), policy.max_backoff)
+        ra = _parse_retry_after_safe(response)
+        delay = ra if ra is not None else _compute_backoff_safe(retry_number, policy)
 
         now = clock()
         if now + delay >= deadline:
@@ -136,7 +168,7 @@ def mutant_off_by_one_attempts(
                 return response
 
         retry_number = attempt + 1
-        delay = min(policy.base_delay * (2 ** (retry_number - 1)), policy.max_backoff)
+        delay = _compute_backoff_safe(retry_number, policy)
 
         now = clock()
         if now + delay >= deadline:
@@ -183,7 +215,7 @@ def mutant_ignore_retry_after(
 
         retry_number = attempt
         # DEFECT: always uses backoff, never checks Retry-After
-        delay = min(policy.base_delay * (2 ** (retry_number - 1)), policy.max_backoff)
+        delay = _compute_backoff_safe(retry_number, policy)
 
         now = clock()
         if now + delay >= deadline:
@@ -229,8 +261,15 @@ def mutant_wrong_backoff(
                 return response
 
         retry_number = attempt
-        # DEFECT: wrong exponent
-        delay = min(policy.base_delay * (2 ** retry_number), policy.max_backoff)
+        # DEFECT: wrong exponent (uses retry_number instead of retry_number - 1)
+        try:
+            ratio = policy.max_backoff / policy.base_delay if policy.base_delay > 0 else 0.0
+            if ratio > 0 and retry_number >= math.log2(ratio):
+                delay = policy.max_backoff
+            else:
+                delay = min(policy.base_delay * (2.0 ** retry_number), policy.max_backoff)
+        except (OverflowError, ValueError):
+            delay = policy.max_backoff
 
         now = clock()
         if now + delay >= deadline:
@@ -274,7 +313,8 @@ def mutant_no_idempotency_check(
         # DEFECT: no idempotency check
 
         retry_number = attempt
-        delay = min(policy.base_delay * (2 ** (retry_number - 1)), policy.max_backoff)
+        ra = _parse_retry_after_safe(response)
+        delay = ra if ra is not None else _compute_backoff_safe(retry_number, policy)
 
         now = clock()
         if now + delay >= deadline:
@@ -319,7 +359,8 @@ def mutant_ignore_deadline(
                 return response
 
         retry_number = attempt
-        delay = min(policy.base_delay * (2 ** (retry_number - 1)), policy.max_backoff)
+        ra = _parse_retry_after_safe(response)
+        delay = ra if ra is not None else _compute_backoff_safe(retry_number, policy)
 
         # DEFECT: no deadline check
         sleep(delay)
@@ -364,7 +405,8 @@ def mutant_swallow_exceptions(
                 return response
 
         retry_number = attempt
-        delay = min(policy.base_delay * (2 ** (retry_number - 1)), policy.max_backoff)
+        ra = _parse_retry_after_safe(response)
+        delay = ra if ra is not None else _compute_backoff_safe(retry_number, policy)
 
         now = clock()
         if now + delay >= deadline:
@@ -426,7 +468,7 @@ def mutant_treatment_as_control(
                 except ValueError:
                     pass
         if delay is None:
-            delay = min(policy.base_delay * (2 ** (retry_number - 1)), policy.max_backoff)
+            delay = _compute_backoff_safe(retry_number, policy)
 
         now = clock()
         if now + delay >= deadline:

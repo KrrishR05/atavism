@@ -1,0 +1,7 @@
+# Pinned dependencies for reproducible Atavism evaluation
+# Generated for Python 3.11+ compatibility
+iniconfig==2.3.0
+packaging==26.3
+pluggy==1.6.0
+pytest==9.1.1
+

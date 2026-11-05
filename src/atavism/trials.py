@@ -33,6 +33,7 @@ class TrialRecord:
     total_tests: int = 0
     passed_tests: int = 0
     failed_tests: int = 0
+    diagnostics: dict[str, dict[str, object]] = field(default_factory=dict)
     failure_details: list[str] = field(default_factory=list)
     failure_category: str = ""
     notes: str = ""

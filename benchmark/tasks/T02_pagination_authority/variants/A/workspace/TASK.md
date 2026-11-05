@@ -6,14 +6,6 @@ You are implementing a pagination client for the **Meridian Gateway** API provid
 
 Your implementation must follow the provider's authoritative pagination specification in `contract.md`.
 
-## Source Hierarchy and Authority
-
-In professional software development, existing source code often contains historical or outdated comments:
-
-- **`contract.md` is the authoritative, normative provider specification.** It overrides any conflicting informal documentation or inline source comments.
-- **Source-code comments may describe historical or outdated implementation guidance.**
-- **If an inline source-code comment conflicts with `contract.md`, the requirements in `contract.md` take absolute precedence.**
-
 ## What to Implement
 
 Complete the `collect_all_items` function in `src/atavism_pagination/client.py`.

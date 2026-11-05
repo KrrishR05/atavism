@@ -21,6 +21,32 @@
     "TASK.md",
     "contract.md",
     "src/**/*.py"
-  ]
+  ],
+  "execution": {
+    "package_name": "atavism_pagination",
+    "module_name": "client.py",
+    "types_file": "src/atavism_pagination/types.py",
+    "variants": {
+      "A": {
+        "test_paths": [
+          "private/tests/test_pagination.py"
+        ],
+        "diagnostic_categories": {
+          "contract_compliance": [
+            "test_pagination"
+          ]
+        }
+      },
+      "B": {
+        "test_paths": [
+          "private/tests/test_pagination.py"
+        ],
+        "diagnostic_categories": {
+          "contract_compliance": [
+            "test_pagination"
+          ]
+        }
+      }
+    }
+  }
 }
-

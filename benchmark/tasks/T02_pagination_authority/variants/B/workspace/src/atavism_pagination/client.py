@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from .types import Page, PageFetcher, PaginationLimitExceeded, PaginationProtocolError
 
-# Legacy pagination behavior:
+# Pagination continuation is controlled by next_cursor.
 # Continue whenever next_cursor is non-empty.
 # Treat has_more as informational metadata.
 

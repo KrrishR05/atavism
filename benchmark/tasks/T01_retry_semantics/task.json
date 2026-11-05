@@ -21,5 +21,34 @@
     "TASK.md",
     "contract.md",
     "src/**/*.py"
-  ]
+  ],
+  "execution": {
+    "package_name": "atavism_retry",
+    "module_name": "client.py",
+    "types_file": "src/atavism_retry/types.py",
+    "variants": {
+      "A": {
+        "test_paths": [
+          "private/tests/common",
+          "private/tests/control"
+        ],
+        "diagnostic_categories": {
+          "common_mechanics": ["test_common"],
+          "pure_convention": ["pure_convention"],
+          "compound_interactions": ["compound_"]
+        }
+      },
+      "B": {
+        "test_paths": [
+          "private/tests/common",
+          "private/tests/treatment"
+        ],
+        "diagnostic_categories": {
+          "common_mechanics": ["test_common"],
+          "pure_convention": ["pure_convention"],
+          "compound_interactions": ["compound_"]
+        }
+      }
+    }
+  }
 }

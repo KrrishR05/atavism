@@ -68,5 +68,6 @@ class TestT02TaskStructure:
         client_b = (TASK_DIR / "variants" / "B" / "workspace" / "src" / "atavism_pagination" / "client.py").read_text(encoding="utf-8")
         assert client_a != client_b
         assert "Pagination continuation is controlled by has_more." in client_a
-        assert "Legacy pagination behavior:" in client_b
+        assert "Pagination continuation is controlled by next_cursor." in client_b
+        assert "Legacy" not in client_b
 

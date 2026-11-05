@@ -271,12 +271,27 @@ Each task includes 9 distinct mutation fixtures verifying that faulty candidates
 
 ---
 
-## 7. Limitations and Next Steps
+## 7. Security Architecture & Execution Boundaries
+
+Candidate evaluation is executed through a metadata-driven harness (`src/atavism/grading.py`):
+
+1. **Local Subprocess Sandbox (Development & Verification):**
+   - Applies strict environment scrubbing via allowlist (`SAFE_SYSTEM_ENV_VARS`), stripping API keys, tokens, SSH vars, and cloud credentials.
+   - Enforces a hard execution timeout (default 60s) and working-directory sandboxing.
+   - *Security Notice:* Environment scrubbing prevents credential leakage but does **not** provide kernel-level filesystem or network virtualization.
+2. **Containerized Jail Specification (Untrusted Candidate Trials):**
+   - Detailed in [`docs/security_and_container_design.md`](docs/security_and_container_design.md).
+   - Specifies `--network none`, `--read-only`, unprivileged user (`nobody:nogroup`), capability dropping (`--cap-drop=ALL`), and cgroup resource limits.
+
+---
+
+## 8. Limitations and Known Methodological Considerations
 
 ### Current Limitations
-1. **Benchmark Scope:** Tasks T01 and T02 are fully implemented and validated; tasks T03–T05 remain staged.
-2. **Subprocess Execution Boundary:** Candidate evaluation currently uses process-level subprocess isolation; containerized sandboxing (Docker `--network none`) is planned for untrusted model execution.
+1. **Benchmark Scope:** Tasks T01 and T02 are fully implemented and hardened; tasks T03–T05 remain staged.
+2. **Subprocess Execution Boundary:** Candidate evaluation currently uses process-level subprocess isolation with environment scrubbing; containerized sandboxing (`--network none`) is required for untrusted model execution.
 3. **Synthetic API Provider:** Meridian Gateway is synthetic to ensure clean isolation of experimental variables without external API changes or rate limits.
+4. **The Stub-Overwrite Confounder in T02:** In file-completion tasks, models often overwrite function stubs wholesale. Passing Variant B demonstrates specification compliance in the presence of conflicting comments, but cannot be claimed as definitive proof of deliberate cognitive conflict arbitration. The primary valid metric is the cross-variant delta ($\text{PassRate}_A - \text{PassRate}_B$).
 
 ### Next Steps
 1. **Implement Task T03:** Semantic Composition (e.g. multi-part SSE stream decoding with custom event boundary rules).
@@ -285,7 +300,37 @@ Each task includes 9 distinct mutation fixtures verifying that faulty candidates
 
 ---
 
-## 8. AI Tool Usage Disclosure
+## 9. Reproducibility & CI Matrix
+
+- **Python Runtime Matrix:** Continuous Integration is configured via [GitHub Actions](.github/workflows/ci.yml) testing Python 3.11, 3.12, 3.13, and 3.14 across Ubuntu and Windows platforms.
+- **Local Verification:** Local runtime verification was conducted under Python 3.14.6 (win32); AST and bytecode syntax compilation verified compatible with Python 3.11+.
+- **Pinned Dependencies:** All test and evaluation dependencies are pinned in `requirements-lock.txt`.
+
+### Quickstart Execution Commands
+
+```powershell
+# 1. Install pinned dependencies
+pip install -r requirements-lock.txt
+
+# 2. Run full pytest regression suite
+$env:PYTHONPATH = "src"
+python -m pytest tests/ -v --tb=short
+
+# 3. Run task pair audits (verifies minimal delta between A/B variants)
+python scripts/audit_pair.py benchmark/tasks/T01_retry_semantics
+python scripts/audit_pair.py benchmark/tasks/T02_pagination_authority
+
+# 4. Run mutation fixture audits (verifies all 18 mutants are caught)
+python scripts/audit_mutants.py
+
+# 5. Run CLI task validation
+python -m atavism.cli validate benchmark/tasks/T01_retry_semantics
+python -m atavism.cli validate benchmark/tasks/T02_pagination_authority
+```
+
+---
+
+## 10. AI Tool Usage Disclosure
 
 In compliance with the micro1 Eval Hackathon guidelines:
 - **Scaffolding and Code Generation:** Antigravity (powered by advanced LLMs) was used to accelerate task scaffolding, test fixture implementation, and documentation under human direction and verification.

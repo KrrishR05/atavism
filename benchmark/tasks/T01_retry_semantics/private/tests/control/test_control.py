@@ -20,10 +20,10 @@ from conftest import (
 )
 
 
-class TestControlLeasebusy:
-    """409 LEASE_BUSY must NOT be retried in control variant A."""
+class TestControlPureConvention:
+    """Pure classification: 409 LEASE_BUSY must NOT be retried in control variant A."""
 
-    def test_409_lease_busy_not_retried(self) -> None:
+    def test_pure_convention_409_lease_busy_not_retried(self) -> None:
         clock = FakeClock()
         sleep = FakeSleeper(clock)
         transport = FakeTransport([lease_busy(), ok_response()])
@@ -31,7 +31,7 @@ class TestControlLeasebusy:
         assert result.status == 409
         assert transport.call_count == 1
 
-    def test_409_lease_busy_returned_immediately(self) -> None:
+    def test_pure_convention_409_lease_busy_returned_immediately(self) -> None:
         clock = FakeClock()
         sleep = FakeSleeper(clock)
         transport = FakeTransport([lease_busy()])
@@ -41,7 +41,11 @@ class TestControlLeasebusy:
         assert transport.call_count == 1
         assert sleep.sleep_calls == []
 
-    def test_409_lease_busy_post_with_key_not_retried(self) -> None:
+
+class TestControlCompoundInteractions:
+    """Compound interactions: 409 LEASE_BUSY interaction with idempotency keys in control."""
+
+    def test_compound_409_lease_busy_post_with_key_not_retried(self) -> None:
         """Even with idempotency key, 409 LEASE_BUSY is not retryable in control."""
         clock = FakeClock()
         sleep = FakeSleeper(clock)
@@ -50,4 +54,3 @@ class TestControlLeasebusy:
         result = send_with_retry(req, transport, DEFAULT_POLICY, clock=clock, sleep=sleep)
         assert result.status == 409
         assert transport.call_count == 1
-

@@ -1,118 +1,122 @@
-"""Tests for reference solution correctness.
+"""Tests for reference solution correctness using the shared grading interface.
 
 Runs the hidden test suite against both reference implementations
-to verify they pass their respective graders.
+to verify they pass their respective graders and produce correct diagnostics.
 """
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
 
 import pytest
 
+from atavism.grading import grade_candidate, grade_task_candidate
+
 TASK_DIR = Path(__file__).resolve().parent.parent / "benchmark" / "tasks" / "T01_retry_semantics"
 PRIVATE = TASK_DIR / "private"
 TYPES_PATH = TASK_DIR / "variants" / "A" / "workspace" / "src" / "atavism_retry" / "types.py"
+CONFTEST_PATH = PRIVATE / "tests" / "conftest.py"
 
 
-def _load_reference(name: str):
-    """Load a reference implementation module."""
-    ref_path = PRIVATE / "reference" / f"{name}.py"
-    spec = importlib.util.spec_from_file_location(f"ref_{name}", ref_path)
-    assert spec is not None and spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-def _run_tests_with_candidate(candidate_path: Path, test_dirs: list[Path]) -> tuple[int, str]:
-    """Run pytest against a candidate using subprocess to ensure isolation."""
-    import subprocess
-    import tempfile
-    import shutil
-
-    with tempfile.TemporaryDirectory(prefix="atavism_ref_test_") as tmpdir:
-        tmp = Path(tmpdir)
-
-        # Set up package
-        pkg_dir = tmp / "src" / "atavism_retry"
-        pkg_dir.mkdir(parents=True)
-        (pkg_dir / "__init__.py").write_text('"""Atavism retry client."""\n')
-        shutil.copy2(TYPES_PATH, pkg_dir / "types.py")
-        shutil.copy2(candidate_path, pkg_dir / "client.py")
-
-        # Copy test files
-        test_dir = tmp / "tests"
-        test_dir.mkdir()
-        shutil.copy2(PRIVATE / "tests" / "conftest.py", test_dir / "conftest.py")
-
-        for td in test_dirs:
-            if td.is_dir():
-                for tf in td.glob("test_*.py"):
-                    shutil.copy2(tf, test_dir / tf.name)
-
-        result = subprocess.run(
-            [sys.executable, "-m", "pytest", str(test_dir), "-v", "--tb=short"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            cwd=tmpdir,
-            env={
-                **dict(__import__("os").environ),
-                "PYTHONPATH": f"{tmp / 'src'}{__import__('os').pathsep}{test_dir}",
-            },
-        )
-        return result.returncode, result.stdout + result.stderr
+def _grade_t01_subsuite(candidate_path: Path, test_dirs: list[Path]) -> bool:
+    res = grade_candidate(
+        candidate_path=candidate_path,
+        types_path=TYPES_PATH,
+        test_dirs=test_dirs,
+        conftest_path=CONFTEST_PATH,
+        package_name="atavism_retry",
+        module_name="client.py",
+    )
+    return res.passed
 
 
 class TestReferenceSolutions:
-    """Reference implementations must pass their graders."""
+    """Reference implementations must pass their graders via shared infrastructure."""
 
     def test_control_reference_passes_common_tests(self) -> None:
-        rc, output = _run_tests_with_candidate(
+        passed = _grade_t01_subsuite(
             PRIVATE / "reference" / "control.py",
             [PRIVATE / "tests" / "common"],
         )
-        assert rc == 0, f"Control reference failed common tests:\n{output}"
+        assert passed, "Control reference failed common tests"
 
     def test_control_reference_passes_control_tests(self) -> None:
-        rc, output = _run_tests_with_candidate(
+        passed = _grade_t01_subsuite(
             PRIVATE / "reference" / "control.py",
             [PRIVATE / "tests" / "control"],
         )
-        assert rc == 0, f"Control reference failed control tests:\n{output}"
+        assert passed, "Control reference failed control tests"
 
     def test_treatment_reference_passes_common_tests(self) -> None:
-        rc, output = _run_tests_with_candidate(
+        passed = _grade_t01_subsuite(
             PRIVATE / "reference" / "treatment.py",
             [PRIVATE / "tests" / "common"],
         )
-        assert rc == 0, f"Treatment reference failed common tests:\n{output}"
+        assert passed, "Treatment reference failed common tests"
 
     def test_treatment_reference_passes_treatment_tests(self) -> None:
-        rc, output = _run_tests_with_candidate(
+        passed = _grade_t01_subsuite(
             PRIVATE / "reference" / "treatment.py",
             [PRIVATE / "tests" / "treatment"],
         )
-        assert rc == 0, f"Treatment reference failed treatment tests:\n{output}"
+        assert passed, "Treatment reference failed treatment tests"
 
     def test_control_reference_fails_treatment_tests(self) -> None:
         """Control reference should FAIL treatment-specific tests
         (because it doesn't retry 409 LEASE_BUSY)."""
-        rc, output = _run_tests_with_candidate(
+        passed = _grade_t01_subsuite(
             PRIVATE / "reference" / "control.py",
             [PRIVATE / "tests" / "treatment"],
         )
-        assert rc != 0, f"Control reference should fail treatment tests but passed:\n{output}"
+        assert not passed, "Control reference should fail treatment tests but passed"
 
     def test_treatment_reference_fails_control_tests(self) -> None:
         """Treatment reference should FAIL control-specific tests
         (because it retries 409 LEASE_BUSY, which control says not to)."""
-        rc, output = _run_tests_with_candidate(
+        passed = _grade_t01_subsuite(
             PRIVATE / "reference" / "treatment.py",
             [PRIVATE / "tests" / "control"],
         )
-        assert rc != 0, f"Treatment reference should fail control tests but passed:\n{output}"
+        assert not passed, "Treatment reference should fail control tests but passed"
 
+    def test_control_reference_full_task_grading(self) -> None:
+        """Verify grade_task_candidate grades Variant A completely."""
+        res = grade_task_candidate(TASK_DIR, "A", PRIVATE / "reference" / "control.py")
+        assert res.passed is True
+        assert res.total_tests == 47
+        assert "common_mechanics" in res.diagnostics
+        assert res.diagnostics["common_mechanics"].passed_all is True
+        assert "pure_convention" in res.diagnostics
+        assert res.diagnostics["pure_convention"].passed_all is True
+        assert "compound_interactions" in res.diagnostics
+        assert res.diagnostics["compound_interactions"].passed_all is True
+
+    def test_treatment_reference_full_task_grading(self) -> None:
+        """Verify grade_task_candidate grades Variant B completely."""
+        res = grade_task_candidate(TASK_DIR, "B", PRIVATE / "reference" / "treatment.py")
+        assert res.passed is True
+        assert res.total_tests == 50
+        assert "common_mechanics" in res.diagnostics
+        assert res.diagnostics["common_mechanics"].passed_all is True
+        assert "pure_convention" in res.diagnostics
+        assert res.diagnostics["pure_convention"].passed_all is True
+        assert "compound_interactions" in res.diagnostics
+        assert res.diagnostics["compound_interactions"].passed_all is True
+
+    def test_alt_control_positive_control_passes_variant_a(self) -> None:
+        """Verify alternative valid control implementation passes all Variant A tests."""
+        res = grade_task_candidate(TASK_DIR, "A", PRIVATE / "reference" / "alt_control.py")
+        assert res.passed is True
+        assert res.total_tests == 47
+        assert res.diagnostics["common_mechanics"].passed_all is True
+        assert res.diagnostics["pure_convention"].passed_all is True
+        assert res.diagnostics["compound_interactions"].passed_all is True
+
+    def test_alt_treatment_positive_control_passes_variant_b(self) -> None:
+        """Verify alternative valid treatment implementation passes all Variant B tests."""
+        res = grade_task_candidate(TASK_DIR, "B", PRIVATE / "reference" / "alt_treatment.py")
+        assert res.passed is True
+        assert res.total_tests == 50
+        assert res.diagnostics["common_mechanics"].passed_all is True
+        assert res.diagnostics["pure_convention"].passed_all is True
+        assert res.diagnostics["compound_interactions"].passed_all is True

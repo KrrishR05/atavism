@@ -20,10 +20,10 @@ from conftest import (
 )
 
 
-class TestTreatmentLeasebusy:
-    """409 LEASE_BUSY must be retried in treatment variant B."""
+class TestTreatmentPureConvention:
+    """Pure classification: 409 LEASE_BUSY must be retried in treatment variant B."""
 
-    def test_409_lease_busy_retried(self) -> None:
+    def test_pure_convention_409_lease_busy_retried(self) -> None:
         clock = FakeClock()
         sleep = FakeSleeper(clock)
         transport = FakeTransport([lease_busy(), ok_response()])
@@ -31,7 +31,11 @@ class TestTreatmentLeasebusy:
         assert result.status == 200
         assert transport.call_count == 2
 
-    def test_409_lease_busy_backoff_applied(self) -> None:
+
+class TestTreatmentCompoundInteractions:
+    """Compound interactions: 409 LEASE_BUSY combined with backoff, Retry-After, and idempotency."""
+
+    def test_compound_409_lease_busy_backoff_applied(self) -> None:
         clock = FakeClock()
         sleep = FakeSleeper(clock)
         transport = FakeTransport([lease_busy(), lease_busy(), ok_response()])
@@ -40,7 +44,7 @@ class TestTreatmentLeasebusy:
         assert result.status == 200
         assert sleep.sleep_calls == [1.0, 2.0]
 
-    def test_409_lease_busy_retry_after_respected(self) -> None:
+    def test_compound_409_lease_busy_retry_after_respected(self) -> None:
         clock = FakeClock()
         sleep = FakeSleeper(clock)
         transport = FakeTransport([lease_busy(retry_after="7"), ok_response()])
@@ -48,7 +52,7 @@ class TestTreatmentLeasebusy:
         assert result.status == 200
         assert sleep.sleep_calls == [7.0]
 
-    def test_409_lease_busy_post_with_key_retried(self) -> None:
+    def test_compound_409_lease_busy_post_with_key_retried(self) -> None:
         """POST with idempotency key can retry 409 LEASE_BUSY in treatment."""
         clock = FakeClock()
         sleep = FakeSleeper(clock)
@@ -58,7 +62,7 @@ class TestTreatmentLeasebusy:
         assert result.status == 200
         assert transport.call_count == 2
 
-    def test_409_lease_busy_post_without_key_not_retried(self) -> None:
+    def test_compound_409_lease_busy_post_without_key_not_retried(self) -> None:
         """POST without idempotency key cannot retry, even though 409 LEASE_BUSY is retryable."""
         clock = FakeClock()
         sleep = FakeSleeper(clock)
@@ -68,7 +72,7 @@ class TestTreatmentLeasebusy:
         assert result.status == 409
         assert transport.call_count == 1
 
-    def test_409_lease_busy_exhausts_attempts(self) -> None:
+    def test_compound_409_lease_busy_exhausts_attempts(self) -> None:
         clock = FakeClock()
         sleep = FakeSleeper(clock)
         policy = RetryPolicy(max_attempts=3, base_delay=1.0, max_backoff=30.0, timeout=120.0)
@@ -76,4 +80,3 @@ class TestTreatmentLeasebusy:
         result = send_with_retry(get_request(), transport, policy, clock=clock, sleep=sleep)
         assert result.status == 409
         assert transport.call_count == 3
-

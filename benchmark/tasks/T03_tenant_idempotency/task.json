@@ -1,0 +1,59 @@
+{
+  "id": "T03",
+  "name": "Tenant Isolation and Idempotency Scope",
+  "dimension": "Semantic Composition Under Interacting Contracts",
+  "description": "Evaluates whether an AI coding model correctly composes tenant-isolation and idempotency requirements when their interaction determines the correct scope of an idempotency key.",
+  "variants": {
+    "A": {
+      "label": "Control",
+      "description": "Global idempotency namespace (key uniqueness service-wide)"
+    },
+    "B": {
+      "label": "Treatment",
+      "description": "Tenant-scoped idempotency namespace (key uniqueness scoped per tenant)"
+    }
+  },
+  "experimental_variable": "Scope of the idempotency key namespace (global vs. tenant-scoped)",
+  "expected_diff_files": [
+    "contract.md"
+  ],
+  "workspace_allowlist": [
+    "TASK.md",
+    "contract.md",
+    "src/**/*.py"
+  ],
+  "execution": {
+    "package_name": "atavism_reservation",
+    "module_name": "service.py",
+    "types_file": "src/atavism_reservation/types.py",
+    "variants": {
+      "A": {
+        "test_paths": [
+          "private/tests/common",
+          "private/tests/control"
+        ],
+        "diagnostic_categories": {
+          "common_validation_mechanics": ["test_validation"],
+          "same_tenant_idempotency": ["test_idempotency"],
+          "tenant_isolation": ["test_isolation"],
+          "state_integrity": ["test_integrity"],
+          "cross_tenant_key_scope": ["test_control_scope"]
+        }
+      },
+      "B": {
+        "test_paths": [
+          "private/tests/common",
+          "private/tests/treatment"
+        ],
+        "diagnostic_categories": {
+          "common_validation_mechanics": ["test_validation"],
+          "same_tenant_idempotency": ["test_idempotency"],
+          "tenant_isolation": ["test_isolation"],
+          "state_integrity": ["test_integrity"],
+          "cross_tenant_key_scope": ["test_treatment_scope"]
+        }
+      }
+    }
+  }
+}
+

@@ -18,6 +18,7 @@ from atavism.grading import grade_candidate
 ROOT = Path(__file__).resolve().parent.parent
 T01_DIR = ROOT / "benchmark" / "tasks" / "T01_retry_semantics"
 T02_DIR = ROOT / "benchmark" / "tasks" / "T02_pagination_authority"
+T03_DIR = ROOT / "benchmark" / "tasks" / "T03_tenant_idempotency"
 
 
 def audit_t01_mutants() -> list[dict[str, object]]:
@@ -127,6 +128,59 @@ def audit_t02_mutants() -> list[dict[str, object]]:
     return results
 
 
+def audit_t03_mutants() -> list[dict[str, object]]:
+    mutants_path = T03_DIR / "private" / "mutants" / "__init__.py"
+    code = mutants_path.read_text(encoding="utf-8")
+
+    mutants = [
+        ("MutantGlobalKeyService", "Uses raw idempotency key in Treatment (omits tenant scoping)", [T03_DIR / "private" / "tests" / "common", T03_DIR / "private" / "tests" / "treatment"]),
+        ("MutantTenantIgnoredService", "Omits tenant ownership check in get_reservation", [T03_DIR / "private" / "tests" / "common"]),
+        ("MutantPayloadBlindService", "Returns previous result even when payload changes", [T03_DIR / "private" / "tests" / "common"]),
+        ("MutantDuplicateCreationService", "Creates new reservation on every repeated request", [T03_DIR / "private" / "tests" / "common"]),
+        ("MutantReplayAllocationService", "Consumes a new identifier on replay", [T03_DIR / "private" / "tests" / "common"]),
+        ("MutantConflictMutationService", "Modifies stored state before raising a conflict", [T03_DIR / "private" / "tests" / "common"]),
+        ("MutantValidationOrderService", "Checks idempotency before input validation", [T03_DIR / "private" / "tests" / "common"]),
+        ("MutantBooleanQuantityService", "Accepts True/False as valid quantity", [T03_DIR / "private" / "tests" / "common"]),
+        ("MutantCrossTenantLeakService", "Returns another tenant's reservation during collision in Control", [T03_DIR / "private" / "tests" / "common", T03_DIR / "private" / "tests" / "control"]),
+        ("MutantTenantKeyCollisionService", "Incorrectly shares idempotency state across tenants in Treatment", [T03_DIR / "private" / "tests" / "common", T03_DIR / "private" / "tests" / "treatment"]),
+    ]
+
+    results = []
+    for cls_name, desc, tdirs in mutants:
+        with tempfile.TemporaryDirectory(prefix=f"t03_mut_{cls_name}_") as td:
+            cand = Path(td) / "service.py"
+            cand.write_text(
+                f"{code}\nReservationService = {cls_name}\n",
+                encoding="utf-8",
+            )
+            res = grade_candidate(
+                candidate_path=cand,
+                types_path=T03_DIR / "variants" / "A" / "workspace" / "src" / "atavism_reservation" / "types.py",
+                test_dirs=tdirs,
+                conftest_path=T03_DIR / "private" / "tests" / "conftest.py",
+                package_name="atavism_reservation",
+                module_name="service.py",
+                timeout=30,
+            )
+
+            first_fail_test = ""
+            first_fail_reason = ""
+            for tname, reason in res.failure_reasons.items():
+                first_fail_test = tname.split("::")[-1]
+                first_fail_reason = reason.split("\n")[0][:100]
+                break
+
+            results.append({
+                "mutant": cls_name,
+                "description": desc,
+                "killed": not res.passed,
+                "failed_tests_count": res.failed_tests,
+                "first_rejecting_test": first_fail_test,
+                "rejection_reason": first_fail_reason,
+            })
+    return results
+
+
 def main() -> None:
     print("=" * 80)
     print("T01 MUTATION AUDIT (Retry Semantics)")
@@ -148,6 +202,19 @@ def main() -> None:
     killed_t02 = sum(1 for r in t02_res if r["killed"])
     print(f"Killed mutants: {killed_t02}/{len(t02_res)} | Surviving: {len(t02_res) - killed_t02}\n")
     for r in t02_res:
+        status = "[KILLED]" if r["killed"] else "[SURVIVED]"
+        print(f"{status} {r['mutant']} ({r['failed_tests_count']} tests failed)")
+        print(f"       Primary rejecting test: {r['first_rejecting_test']}")
+        print(f"       Rejection reason:       {r['rejection_reason']}")
+        print(f"       Behavioral intent:      {r['description']}\n")
+
+    print("=" * 80)
+    print("T03 MUTATION AUDIT (Tenant Isolation and Idempotency Scope)")
+    print("=" * 80)
+    t03_res = audit_t03_mutants()
+    killed_t03 = sum(1 for r in t03_res if r["killed"])
+    print(f"Killed mutants: {killed_t03}/{len(t03_res)} | Surviving: {len(t03_res) - killed_t03}\n")
+    for r in t03_res:
         status = "[KILLED]" if r["killed"] else "[SURVIVED]"
         print(f"{status} {r['mutant']} ({r['failed_tests_count']} tests failed)")
         print(f"       Primary rejecting test: {r['first_rejecting_test']}")

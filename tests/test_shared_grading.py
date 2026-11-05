@@ -11,6 +11,7 @@ from atavism.grading import GradeResult, grade_task_candidate
 ROOT = Path(__file__).resolve().parent.parent
 T01_DIR = ROOT / "benchmark" / "tasks" / "T01_retry_semantics"
 T02_DIR = ROOT / "benchmark" / "tasks" / "T02_pagination_authority"
+T03_DIR = ROOT / "benchmark" / "tasks" / "T03_tenant_idempotency"
 
 
 class TestSharedGradingInterface:
@@ -82,3 +83,32 @@ class TestSharedGradingInterface:
         assert res.diagnostics["pure_convention"].score == 0.0
         assert res.diagnostics["compound_interactions"].passed_all is False
         assert res.diagnostics["compound_interactions"].failed >= 4
+
+    def test_grade_t03_control_reference(self) -> None:
+        cand = T03_DIR / "private" / "reference" / "control.py"
+        res = grade_task_candidate(T03_DIR, "A", cand)
+        assert isinstance(res, GradeResult)
+        assert res.passed is True
+        assert res.total_tests == 61
+        assert res.failed_tests == 0
+        assert "cross_tenant_key_scope" in res.diagnostics
+        assert res.diagnostics["cross_tenant_key_scope"].passed_all is True
+
+    def test_grade_t03_treatment_reference(self) -> None:
+        cand = T03_DIR / "private" / "reference" / "treatment.py"
+        res = grade_task_candidate(T03_DIR, "B", cand)
+        assert isinstance(res, GradeResult)
+        assert res.passed is True
+        assert res.total_tests == 62
+        assert res.failed_tests == 0
+        assert "cross_tenant_key_scope" in res.diagnostics
+        assert res.diagnostics["cross_tenant_key_scope"].passed_all is True
+
+    def test_grade_t03_control_candidate_in_treatment_variant(self) -> None:
+        """Control candidate fails Treatment B because global key collision raises conflict."""
+        cand = T03_DIR / "private" / "reference" / "control.py"
+        res = grade_task_candidate(T03_DIR, "B", cand)
+        assert res.passed is False
+        assert res.failed_tests == 5
+        assert res.diagnostics["cross_tenant_key_scope"].passed_all is False
+        assert res.diagnostics["cross_tenant_key_scope"].failed == 5

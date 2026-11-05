@@ -34,7 +34,7 @@ Atavism establishes five foundational research dimensions for contract evaluatio
 |---|---|---|
 | **Convention Divergence** | Adhering to explicit behavior that deliberately departs from common conventions. | **T01** (Retry Semantics) |
 | **Specification Conflict Resolution** | Prioritizing authoritative API contracts over conflicting legacy implementation guidance. | **T02** (Pagination Authority) |
-| **Semantic Composition** | Preserving multiple interacting technical requirements simultaneously (e.g., deadlines, backoff, idempotency). | Staged |
+| **Semantic Composition** | Preserving multiple interacting technical requirements simultaneously (e.g., tenant isolation and idempotency scope). | **T03** (Tenant Idempotency) |
 | **Uncertainty Handling** | Recognizing missing, ambiguous, or contradictory specifications rather than guessing. | Staged |
 | **Contract Consistency** | Maintaining specified behavior across entire implementations without drift. | Staged |
 
@@ -70,6 +70,20 @@ Atavism establishes five foundational research dimensions for contract evaluatio
     # Treat has_more as informational metadata.
     ```
   - `TASK.md` explicitly establishes the source hierarchy: `contract.md` is normative and overrides inline comments. Both variants share identical `contract.md` and `TASK.md`.
+
+### T03: Tenant Isolation and Idempotency Scope
+- **Research Dimension:** Semantic Composition Under Interacting Contracts
+- **Scenario:** Implement a deterministic multi-tenant reservation coordinator (`ReservationService`) with injected identifier allocation (`id_factory`).
+- **Core Semantics:**
+  - `tenant_id`, `item_id`, and `idempotency_key` must be non-empty, non-whitespace strings.
+  - `quantity` must be a positive integer; Python `bool` values (`True`/`False`) must be rejected despite subclassing `int`.
+  - Validation must occur before checking idempotency records; invalid requests must not mutate state or consume identifiers.
+  - Replays with identical payload return the original `Reservation` without allocating new IDs.
+  - Replays with different payloads raise `IdempotencyConflict` without mutating stored state.
+  - `get_reservation` retrieves only reservations belonging to the requesting tenant; foreign or non-existent reservations return `None`.
+- **Core Experimental Variable:**
+  - *Variant A (Control):* Idempotency namespace is **global across the service** (`idempotency_key`). Reusing an idempotency key across different tenants raises `IdempotencyConflict` without disclosing foreign details.
+  - *Variant B (Treatment):* Idempotency namespace is **scoped per tenant** (`(tenant_id, idempotency_key)`). Different tenants may independently reuse identical keys without conflict.
 
 ---
 
@@ -269,6 +283,18 @@ Each task includes 9 distinct mutation fixtures verifying that faulty candidates
 8. `mutant_silent_partial_on_limit` (silently returns partial results on page limit)
 9. `mutant_swallow_exceptions` (swallows fetcher exceptions)
 
+#### T03 Mutants (Tenant Isolation and Idempotency Scope)
+1. `MutantGlobalKeyService` (uses raw idempotency key in Treatment, omitting tenant scoping)
+2. `MutantTenantIgnoredService` (omits tenant check during retrieval, leaking cross-tenant records)
+3. `MutantPayloadBlindService` (returns previous result without detecting payload conflicts)
+4. `MutantDuplicateCreationService` (always creates new reservations, ignoring idempotency)
+5. `MutantReplayAllocationService` (calls id_factory on replay, consuming extra identifiers)
+6. `MutantConflictMutationService` (mutates stored reservation state when conflict occurs)
+7. `MutantValidationOrderService` (returns existing result before validating incoming request)
+8. `MutantBooleanQuantityService` (accepts boolean True as integer quantity)
+9. `MutantCrossTenantLeakService` (returns foreign reservation during key collision in Control)
+10. `MutantTenantKeyCollisionService` (incorrectly blocks cross-tenant keys in Treatment)
+
 ---
 
 ## 7. Security Architecture & Execution Boundaries
@@ -288,15 +314,15 @@ Candidate evaluation is executed through a metadata-driven harness (`src/atavism
 ## 8. Limitations and Known Methodological Considerations
 
 ### Current Limitations
-1. **Benchmark Scope:** Tasks T01 and T02 are fully implemented and hardened; tasks T03–T05 remain staged.
+1. **Benchmark Scope:** Tasks T01, T02, and T03 are fully implemented and validated; tasks T04–T05 remain staged.
 2. **Subprocess Execution Boundary:** Candidate evaluation currently uses process-level subprocess isolation with environment scrubbing; containerized sandboxing (`--network none`) is required for untrusted model execution.
 3. **Synthetic API Provider:** Meridian Gateway is synthetic to ensure clean isolation of experimental variables without external API changes or rate limits.
 4. **The Stub-Overwrite Confounder in T02:** In file-completion tasks, models often overwrite function stubs wholesale. Passing Variant B demonstrates specification compliance in the presence of conflicting comments, but cannot be claimed as definitive proof of deliberate cognitive conflict arbitration. The primary valid metric is the cross-variant delta ($\text{PassRate}_A - \text{PassRate}_B$).
 
 ### Next Steps
-1. **Implement Task T03:** Semantic Composition (e.g. multi-part SSE stream decoding with custom event boundary rules).
-2. **Conduct Model Evaluation Trials:** Execute multi-trial evaluations (3–5 trials per variant) across frontier models.
-3. **Statistical Analysis:** Compute pass@1, pass@k, and control-versus-treatment delta $\Delta = \text{pass}(B) - \text{pass}(A)$.
+1. **Conduct Model Evaluation Trials:** Execute multi-trial evaluations (3–5 trials per variant) across frontier models on T01, T02, and T03.
+2. **Statistical Analysis:** Compute pass@1, pass@k, and control-versus-treatment delta $\Delta = \text{pass}(B) - \text{pass}(A)$.
+3. **Stage T04/T05 Development:** Implement Uncertainty Handling and Contract Consistency.
 
 ---
 
@@ -319,13 +345,15 @@ python -m pytest tests/ -v --tb=short
 # 3. Run task pair audits (verifies minimal delta between A/B variants)
 python scripts/audit_pair.py benchmark/tasks/T01_retry_semantics
 python scripts/audit_pair.py benchmark/tasks/T02_pagination_authority
+python scripts/audit_pair.py benchmark/tasks/T03_tenant_idempotency
 
-# 4. Run mutation fixture audits (verifies all 18 mutants are caught)
+# 4. Run mutation fixture audits (verifies all 28 mutants are caught)
 python scripts/audit_mutants.py
 
 # 5. Run CLI task validation
 python -m atavism.cli validate benchmark/tasks/T01_retry_semantics
 python -m atavism.cli validate benchmark/tasks/T02_pagination_authority
+python -m atavism.cli validate benchmark/tasks/T03_tenant_idempotency
 ```
 
 ---

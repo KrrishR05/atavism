@@ -74,6 +74,11 @@ In file-completion and code-editing benchmarks, evaluating conflict resolution i
 3. **Interpretive Boundary:** Passing Variant B demonstrates that the generated solution satisfies the authoritative API contract despite the presence of conflicting inline comments in the starter repository. **However, researchers must not claim that passing Variant B proves conscious or deliberate cognitive conflict arbitration.**
 4. **Valid Comparative Metric:** The construct validity of T02 rests on the **cross-variant delta** ($\text{PassRate}_A - \text{PassRate}_B$). A significant drop in pass rate from Variant A to Variant B indicates that the conflicting comment induced specification regression. An individual pass on Variant B, however, cannot be disambiguated from starter-comment neglect or wholesale overwrite.
 
+### T03 — Tenant Isolation and Idempotency Scope
+- **Research Dimension:** Semantic Composition Under Interacting Contracts
+- **Experimental Variable:** Scope of the idempotency key namespace defined in `contract.md` (Global in Variant A vs. Tenant-Scoped in Variant B).
+- **Target Limitation:** AI coding models implement idempotency and tenant isolation as isolated mechanisms but fail to compose them, treating idempotency lookups globally even when tenant scoping is required.
+
 ## File Allowlist for Workspace Export
 
 Only these files may be included in a model workspace export:

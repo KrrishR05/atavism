@@ -22,6 +22,7 @@ atavism = "atavism.cli:main"
 where = ["src"]
 
 [tool.pytest.ini_options]
+pythonpath = ["src"]
 testpaths = ["tests", "benchmark"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]

@@ -55,7 +55,7 @@ The message transport guarantees **At-Least-Once, Out-of-Order Delivery**:
 
 ### 5.1 Event Tracking Domains
 The projector maintains three conceptually separate tracking domains for each account:
-1. **Observed Event Identity:** The immutable identity (event type, sequence ID, amount, reason) of every event ever observed for that account. This record persists permanently across buffer removal and domain failures.
+1. **Observed Event Identity:** The immutable identity (event type, sequence ID, amount, reason) of every event ever observed for that account. This record persists permanently across FIFO gap rejection, buffer removal, and domain failures. An event becomes observed after it passes structural and payload validation and reaches sequence processing, registering its identity before variant-specific sequence-order handling. Malformed events that fail schema validation do not create observed identities.
 2. **Pending-Buffer Membership:** Whether an uncommitted future event is currently waiting in the in-memory buffer for contiguous predecessors.
 3. **Committed Event History:** The monotonically advancing sequence of events that successfully satisfied all domain preconditions and mutated projection state.
 
@@ -64,6 +64,7 @@ The projector maintains three conceptually separate tracking domains for each ac
 | :--- | :--- | :--- |
 | **Applied** (`sequence_id <= last_applied_sequence`) | **Ignore idempotently**: Return current `AccountProjection` without modifying state or balance. | **Reject**: Raise `ConflictingEventError`. Account state remains untouched. |
 | **Pending in Buffer** (`sequence_id > last_applied_sequence + 1`, buffered) | **Ignore idempotently**: Return current `AccountProjection` without duplicate buffer insertion. | **Reject**: Raise `ConflictingEventError`. Buffer remains untouched. |
+| **Gap-Rejected / Unbuffered** (Control A: `sequence_id > last_applied_sequence + 1`) | **Sequence-order re-evaluation**: If predecessor sequences are still missing, reject with `InvalidEventSequenceError`. Once contiguous, process and commit normally. | **Reject**: Raise `ConflictingEventError`. Account state remains untouched. |
 | **Blocked Sequence ID** (Removed from buffer upon domain precondition failure) | **Deterministic re-evaluation**: Re-evaluated against the current committed state; deterministically fails again with the same domain exception, leaving the account blocked (`is_blocked=True, blocked_sequence_id=sequence_id`). | **Reject**: Raise `ConflictingEventError`. Account state and buffer remain untouched. |
 
 ### 5.3 Blocked Stream Invariants and Causal Non-Bypass
@@ -83,4 +84,3 @@ The projector maintains three conceptually separate tracking domains for each ac
 4. **Idempotent Freeze Delivery:** An identical duplicate `ACCOUNT_FROZEN` event is ignored idempotently.
 5. **Monetary Operation Prohibition:** Any deposit or withdrawal event attempted on a frozen account must raise `AccountFrozenError`.
 6. **Drain Order Security Rule:** A frozen account must never accept a monetary transaction simply because that transaction arrived out-of-order and was buffered before the freeze event was applied. When a buffer is drained, events are evaluated strictly in sequence order against the evolving state: if sequence $k$ freezes the account, sequence $k+1$ (monetary event) evaluated during the same drain fails with `AccountFrozenError` and blocks the stream at sequence $k+1$.
-

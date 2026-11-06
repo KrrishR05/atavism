@@ -179,13 +179,14 @@ class AccountProjector:
         if event.event_type == EventType.ACCOUNT_OPENED:
             raise AccountAlreadyOpenedError(f"Account {aid} already initialized")
 
+        record.history[event.sequence_id] = event
+
         expected = record.last_applied_sequence + 1
         if event.sequence_id > expected:
             raise InvalidEventSequenceError(
                 f"Strict FIFO contract violation: expected {expected}, got {event.sequence_id}"
             )
 
-        record.history[event.sequence_id] = event
         handler = self._handlers[event.event_type]
         handler(record, event)
         return record.snapshot()

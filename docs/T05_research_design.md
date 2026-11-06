@@ -100,7 +100,7 @@ If $E_1.\text{sequence\_id} == E_2.\text{sequence\_id}$ but any of the payload f
 
 #### Observed Event Identity Record and Event State Separation
 The projector maintains three conceptually separate tracking domains for each account:
-1. **Observed Event Identity:** The immutable identity (event type, sequence ID, amount, reason) of every event ever observed for that account. This record persists permanently across buffer removal and domain failures.
+1. **Observed Event Identity:** The immutable identity (event type, sequence ID, amount, reason) of every event ever observed for that account. This record persists permanently across FIFO gap rejection, buffer removal, and domain failures. An event becomes observed after it passes structural and payload validation and reaches sequence processing, registering its identity before variant-specific sequence-order handling. Malformed events that fail schema validation do not create observed identities.
 2. **Pending-Buffer Membership:** Whether an uncommitted future event is currently waiting in the in-memory buffer for contiguous predecessors.
 3. **Committed Event History:** The monotonically advancing sequence of events that successfully satisfied all domain preconditions and mutated projection state.
 
@@ -111,6 +111,7 @@ A domain-failed event is permanently recorded in **Observed Event Identity**, bu
 | :--- | :--- | :--- |
 | **Applied** (`sequence_id <= last_applied_sequence`) | **Ignore idempotently**: Return current `AccountProjection` without modifying state or balance. | **Reject**: Raise `ConflictingEventError`. Account state remains untouched. |
 | **Pending in Buffer** (`sequence_id > last_applied_sequence + 1`, buffered) | **Ignore idempotently**: Return current `AccountProjection` without duplicate buffer insertion. | **Reject**: Raise `ConflictingEventError`. Buffer remains untouched. |
+| **Gap-Rejected / Unbuffered** (Control A: `sequence_id > last_applied_sequence + 1`) | **Sequence-order re-evaluation**: If predecessor sequences are still missing, reject with `InvalidEventSequenceError`. Once contiguous, process and commit normally. | **Reject**: Raise `ConflictingEventError`. Account state remains untouched. |
 | **Blocked Sequence ID** (Removed from buffer upon domain precondition failure) | **Deterministic re-evaluation**: Re-evaluated against the current committed state; deterministically fails again with the same domain exception, leaving the account blocked (`is_blocked=True, blocked_sequence_id=sequence_id`). | **Reject**: Raise `ConflictingEventError`. Account state and buffer remain untouched. |
 
 #### Blocked Stream Invariants and Causal Non-Bypass

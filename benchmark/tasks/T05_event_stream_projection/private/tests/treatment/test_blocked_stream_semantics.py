@@ -132,3 +132,82 @@ def test_blocked_stream_drain_freeze_ordering_security(projector: AccountProject
     assert proj.blocked_sequence_id == 4
     assert proj.pending_buffer_count == 0  # Evicted on domain failure
 
+
+def test_blocked_stream_eviction_and_identity_retention(projector: AccountProjector, make_event):
+    """Explicitly verifies Invariants 1, 2, 9, 10: eviction, identity retention, retry semantics."""
+    acc_id = "ACC-EVICT"
+    projector.apply_event(make_event(acc_id, EventType.ACCOUNT_OPENED, 1, Decimal("100.00")))
+
+    # Buffer an overdraft withdrawal at sequence 3
+    wdr3 = make_event(acc_id, EventType.FUNDS_WITHDRAWN, 3, Decimal("150.00"))
+    projector.apply_event(wdr3)
+
+    # Deliver sequence 2 deposit ($10.00) -> commits $110.00, then sequence 3 fails
+    ev2 = make_event(acc_id, EventType.FUNDS_DEPOSITED, 2, Decimal("10.00"))
+    with pytest.raises(InsufficientFundsError):
+        projector.apply_event(ev2)
+
+    proj = projector.get_projection(acc_id)
+    assert proj is not None
+
+    # Invariant 1: Failed buffered event is evicted from pending buffer
+    assert proj.pending_buffer_count == 0
+
+    # Invariant 2: Observed identity is retained (conflicting retry rejected)
+    conflict_wdr3 = make_event(acc_id, EventType.FUNDS_WITHDRAWN, 3, Decimal("120.00"))
+    with pytest.raises(ConflictingEventError):
+        projector.apply_event(conflict_wdr3)
+
+    # Invariant 9: Identical retry deterministically fails again
+    with pytest.raises(InsufficientFundsError):
+        projector.apply_event(wdr3)
+
+    proj_retry = projector.get_projection(acc_id)
+    assert proj_retry is not None
+    assert proj_retry.is_blocked is True
+    assert proj_retry.blocked_sequence_id == 3
+
+
+def test_blocked_stream_causal_non_bypass_invariant(projector: AccountProjector, make_event):
+    """Explicitly verifies Invariants 3, 4, 5, 6, 7, 8, 11: non-bypass and blockage persistence."""
+    acc_id = "ACC-BYPASS"
+    projector.apply_event(make_event(acc_id, EventType.ACCOUNT_OPENED, 1, Decimal("50.00")))
+
+    # Buffer withdrawal at sequence 3 ($80.00)
+    projector.apply_event(make_event(acc_id, EventType.FUNDS_WITHDRAWN, 3, Decimal("80.00")))
+
+    # Buffer a large deposit at sequence 4 ($100.00)
+    projector.apply_event(make_event(acc_id, EventType.FUNDS_DEPOSITED, 4, Decimal("100.00")))
+
+    # Deliver sequence 2 ($20.00) -> commits $70.00, then sequence 3 fails
+    with pytest.raises(InsufficientFundsError):
+        projector.apply_event(make_event(acc_id, EventType.FUNDS_DEPOSITED, 2, Decimal("20.00")))
+
+    proj = projector.get_projection(acc_id)
+    assert proj is not None
+
+    # Invariant 3: Prior commit is final ($70.00)
+    assert proj.balance == Decimal("70.00")
+
+    # Invariant 4: Last applied sequence remains at 2 (before failed sequence 3)
+    assert proj.last_applied_sequence == 2
+
+    # Invariant 5 & 6: Observable blocked state
+    assert proj.is_blocked is True
+    assert proj.blocked_sequence_id == 3
+
+    # Invariant 7: Later buffered events remain pending
+    assert proj.pending_buffer_count == 1
+
+    # Invariant 8: Later events NEVER bypass the blocked sequence (balance is still $70.00, NOT $170.00)
+    assert proj.balance == Decimal("70.00")
+
+    # Invariant 11: New future events cannot advance or unblock the stream
+    p5 = projector.apply_event(make_event(acc_id, EventType.FUNDS_DEPOSITED, 5, Decimal("200.00")))
+    assert p5.balance == Decimal("70.00")
+    assert p5.last_applied_sequence == 2
+    assert p5.is_blocked is True
+    assert p5.blocked_sequence_id == 3
+    assert p5.pending_buffer_count == 2
+
+

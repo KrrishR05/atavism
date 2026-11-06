@@ -147,6 +147,9 @@ class AccountProjector:
         if event.event_type == EventType.ACCOUNT_OPENED:
             raise AccountAlreadyOpenedError(f"Account {account_id} is already opened")
 
+        # Record observed identity before sequence-order evaluation
+        state.observed_events[event.sequence_id] = event
+
         # FIFO sequence validation
         expected_seq = state.last_applied_sequence + 1
         if event.sequence_id > expected_seq:
@@ -154,8 +157,6 @@ class AccountProjector:
                 f"FIFO violation: expected sequence {expected_seq}, received {event.sequence_id}"
             )
 
-        # Record observed identity
-        state.observed_events[event.sequence_id] = event
         return self._apply_transition(state, event)
 
     def _apply_transition(self, state: _AccountState, event: AccountEvent) -> AccountProjection:

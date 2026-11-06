@@ -18,7 +18,7 @@ class TestT05ReferenceSolutions:
         cand = PRIVATE / "reference" / "control.py"
         res = grade_task_candidate(TASK_DIR, "A", cand)
         assert res.passed is True
-        assert res.total_tests == 84
+        assert res.total_tests == 86
         assert res.failed_tests == 0
         assert res.errors == 0
         assert res.return_code == 0
@@ -41,7 +41,7 @@ class TestT05ReferenceSolutions:
         cand = PRIVATE / "reference" / "treatment.py"
         res = grade_task_candidate(TASK_DIR, "B", cand)
         assert res.passed is True
-        assert res.total_tests == 87
+        assert res.total_tests == 89
         assert res.failed_tests == 0
         assert res.errors == 0
         assert res.return_code == 0
@@ -66,7 +66,7 @@ class TestT05ReferenceSolutions:
         cand = PRIVATE / "reference" / "alt_control.py"
         res = grade_task_candidate(TASK_DIR, "A", cand)
         assert res.passed is True
-        assert res.total_tests == 84
+        assert res.total_tests == 86
         assert res.diagnostics["control_fifo_ordering"].passed_all is True
 
     def test_alt_treatment_positive_control_passes_variant_b(self) -> None:
@@ -74,7 +74,7 @@ class TestT05ReferenceSolutions:
         cand = PRIVATE / "reference" / "alt_treatment.py"
         res = grade_task_candidate(TASK_DIR, "B", cand)
         assert res.passed is True
-        assert res.total_tests == 87
+        assert res.total_tests == 89
         assert res.diagnostics["treatment_buffering_and_draining"].passed_all is True
         assert res.diagnostics["treatment_blocked_stream_semantics"].passed_all is True
 

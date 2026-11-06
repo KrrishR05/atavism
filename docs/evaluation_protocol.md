@@ -2,7 +2,7 @@
 
 **Document Version:** 1.0.0  
 **Status:** Pre-Trial Protocol Specification (No model trials have been conducted)  
-**Task Scope:** T01 (Retry Semantics), T02 (Pagination Authority), T03 (Tenant Idempotency), T04 (Split-Tender Refund Allocation)
+**Task Scope:** T01 (Retry Semantics), T02 (Pagination Authority), T03 (Tenant Idempotency), T04 (Split-Tender Refund Allocation), T05 (Event Stream Projection Protocol)
 
 ---
 
@@ -14,7 +14,7 @@ The primary experimental variable across all tasks is the **matched-pair delta**
 $$\Delta = \text{PassRate}(\text{Variant B}) - \text{PassRate}(\text{Variant A})$$
 
 - **Variant A (Control):** Establishes baseline code synthesis capability under conventional semantics or consistent inline guidance.
-- **Variant B (Treatment):** Tests contract adherence when requirements depart from common convention (T01), conflict with legacy starter code comments (T02), require multi-clause semantic composition (T03), or leave consequential business policies undefined (T04).
+- **Variant B (Treatment):** Tests contract adherence when requirements depart from common convention (T01), conflict with legacy starter code comments (T02), require multi-clause semantic composition (T03), leave consequential business policies undefined (T04), or transition from FIFO to asynchronous out-of-order delivery with causal buffering (T05).
 
 ---
 
@@ -100,6 +100,7 @@ In addition to binary pass/fail, trials report category diagnostic scores:
 - `conflict_resolution`: Adherence to authoritative contract over legacy inline guidance (T02).
 - `cross_tenant_key_scope`: Scope adherence under interacting requirements (T03).
 - `treatment_policy` & `treatment_isolation`: Silent invention guard and path isolation under incomplete specs (T04).
+- `treatment_buffering_and_draining` & `treatment_blocked_stream_semantics`: Temporal ordering, out-of-order event buffering, and deterministic blocked stream semantics (T05).
 
 ### 5.5 Dual-Channel Uncertainty Handling Assessment (T04)
 Evaluating T04 requires scoring both executable code and the candidate's communication transcript:
@@ -192,4 +193,8 @@ Researchers evaluating Atavism must strictly preserve the following analytical d
 1. **Engineering Verification vs. Model Capability:** Passing engineering unit tests and reference solution checks proves only that benchmark instrumentation is working as designed. It does not provide evidence about any AI model's capabilities.
 2. **Behavioral Compliance vs. Internal Reasoning:** A model producing code that complies with Variant B (e.g. in T02) satisfies the contract, but **does not prove deliberate cognitive conflict arbitration**. The model may have replaced the function stub entirely without processing the inline comment.
 3. **Mutation Detection vs. Real-World Defect Elimination:** 100% mutation kill rate confirms that tests detect specific modeled deviations; it does not guarantee that arbitrary human or model errors will always be detected.
+4. **Execution Security Boundary & Fail-Closed Requirement:**
+   - Model trials evaluating untrusted candidate code MUST execute with `--trust-level untrusted` using the containerized execution backend on a verified Linux container host.
+   - The `--trust-level trusted-local` option executes directly on the host OS. Environment variable scrubbing (`build_minimal_env()`) is useful defense-in-depth against credential leakage, but is NOT an operating system sandbox: it provides zero filesystem, process, network, or resource isolation. `trusted-local` is strictly restricted to trusted internal reference validation, and must NEVER be used for evaluating untrusted model-generated code.
+   - If containerized execution is unavailable on the host, the benchmark fails closed (exit code 126). Untrusted code must never be executed on the host.
 

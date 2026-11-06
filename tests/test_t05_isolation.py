@@ -72,9 +72,8 @@ class TestT05ExportIsolation:
             for rel_path in manifest:
                 assert matches_allowlist(rel_path)
 
-            for root, _, files in target_dir.walk():
-                for f in files:
-                    full_p = root / f
+            for full_p in target_dir.rglob("*"):
+                if full_p.is_file():
                     rel_p = full_p.relative_to(target_dir).as_posix()
                     assert matches_allowlist(rel_p), f"Export contained disallowed file: {rel_p}"
 

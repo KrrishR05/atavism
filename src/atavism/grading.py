@@ -19,6 +19,15 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from atavism.execution import (
+    ContainerExecutionBackend,
+    ExecutionBackend,
+    ExecutionResult,
+    TrustLevel,
+    TrustedLocalBackend,
+    UntrustedExecutionUnavailableError,
+)
+
 # Allowlist of environment variables permitted in candidate execution subprocesses
 SAFE_SYSTEM_ENV_VARS: frozenset[str] = frozenset({
     # Windows core runtime
@@ -115,10 +124,12 @@ def grade_candidate(
     test_dirs: list[Path],
     conftest_path: Path,
     *,
-    package_name: str = "atavism_retry",
-    module_name: str = "client.py",
+    package_name: str,
+    module_name: str,
     timeout: int = 60,
     diagnostic_categories: dict[str, list[str]] | None = None,
+    trust_level: str = "trusted-local",
+    backend: ExecutionBackend | None = None,
 ) -> GradeResult:
     """Grade a candidate implementation against the hidden test suite.
 
@@ -127,14 +138,36 @@ def grade_candidate(
         types_path: Path to types.py (shared type definitions).
         test_dirs: Directories or files containing tests to run.
         conftest_path: Path to conftest.py.
-        package_name: Target Python package name (e.g. 'atavism_retry').
-        module_name: Module filename within the package (e.g. 'client.py').
+        package_name: Target Python package name (e.g. 'atavism_retry'). Required.
+        module_name: Module filename within the package (e.g. 'client.py'). Required.
         timeout: Maximum seconds for pytest execution.
         diagnostic_categories: Optional mapping of category names to identifier substrings.
+        trust_level: Trust level for evaluation ('untrusted' or 'trusted-local').
+        backend: Optional custom ExecutionBackend. If None, chosen based on trust_level.
 
     Returns:
         GradeResult with pass/fail details and category diagnostics.
     """
+    if not package_name or not isinstance(package_name, str) or not package_name.isidentifier():
+        raise ValueError(
+            f"Invalid package_name: {package_name!r}. Must be a non-empty Python identifier."
+        )
+    if not module_name or not isinstance(module_name, str) or not module_name.endswith(".py"):
+        raise ValueError(
+            f"Invalid module_name: {module_name!r}. Must be a valid .py filename."
+        )
+
+    if trust_level == "untrusted":
+        if backend is None:
+            backend = ContainerExecutionBackend()
+    elif trust_level == "trusted-local":
+        if backend is None:
+            backend = TrustedLocalBackend()
+    else:
+        raise ValueError(
+            f"Invalid trust_level: {trust_level!r}. Expected 'untrusted' or 'trusted-local'."
+        )
+
     candidate_path = Path(candidate_path).resolve()
     types_path = Path(types_path).resolve()
     conftest_path = Path(conftest_path).resolve()
@@ -171,12 +204,12 @@ def grade_candidate(
 
         junit_xml = tmp / "junit.xml"
 
-        # Execute pytest in isolated subprocess with scrubbed minimal environment
+        # Execute pytest with scrubbed minimal environment
         env_path = str(tmp / "src")
         clean_env = build_minimal_env([env_path, str(test_dir)])
 
         try:
-            result = subprocess.run(
+            exec_res = backend.execute(
                 [
                     sys.executable,
                     "-m",
@@ -188,25 +221,35 @@ def grade_candidate(
                     f"--junitxml={junit_xml}",
                     f"--rootdir={tmpdir}",
                 ],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                cwd=tmpdir,
+                cwd=tmp,
                 env=clean_env,
+                timeout=timeout,
             )
-        except subprocess.TimeoutExpired as exc:
+        except UntrustedExecutionUnavailableError as exc:
             return GradeResult(
                 passed=False,
                 total_tests=0,
                 passed_tests=0,
                 failed_tests=0,
                 errors=1,
-                output=f"Candidate execution timed out after {timeout} seconds.\n{exc.stdout or ''}\n{exc.stderr or ''}",
+                output=f"SECURITY ERROR: {exc}",
+                return_code=126,
+                failure_reasons={"security": str(exc)},
+            )
+
+        if exec_res.timed_out:
+            return GradeResult(
+                passed=False,
+                total_tests=0,
+                passed_tests=0,
+                failed_tests=0,
+                errors=1,
+                output=f"Candidate execution timed out after {timeout} seconds.\n{exec_res.stdout}\n{exec_res.stderr}",
                 return_code=124,
                 failure_reasons={"timeout": f"Timed out after {timeout}s"},
             )
 
-        output = result.stdout + result.stderr
+        output = exec_res.stdout + exec_res.stderr
 
         # Parse test outcomes from JUnit XML if generated
         test_outcomes: dict[str, str] = {}
@@ -299,7 +342,7 @@ def grade_candidate(
                 )
 
         # Overall pass requires 0 return code AND 0 failures/errors AND at least 1 test passed
-        overall_passed = (result.returncode == 0) and (failed_tests == 0) and (errors == 0) and (passed_tests > 0)
+        overall_passed = (exec_res.return_code == 0) and (failed_tests == 0) and (errors == 0) and (passed_tests > 0)
 
         return GradeResult(
             passed=overall_passed,
@@ -308,7 +351,7 @@ def grade_candidate(
             failed_tests=failed_tests,
             errors=errors,
             output=output,
-            return_code=result.returncode,
+            return_code=exec_res.return_code,
             diagnostics=diagnostics,
             test_outcomes=test_outcomes,
             failure_reasons=failure_reasons,
@@ -321,6 +364,8 @@ def grade_task_candidate(
     candidate_path: Path,
     *,
     timeout: int = 60,
+    trust_level: str = "trusted-local",
+    backend: ExecutionBackend | None = None,
 ) -> GradeResult:
     """Grade a candidate implementation using task.json execution metadata.
 
@@ -329,6 +374,8 @@ def grade_task_candidate(
         variant: Variant identifier ('A' or 'B').
         candidate_path: Path to the candidate solution file.
         timeout: Maximum seconds for test execution.
+        trust_level: Evaluation trust level ('untrusted' or 'trusted-local').
+        backend: Optional custom execution backend.
 
     Returns:
         GradeResult with comprehensive diagnostics.
@@ -404,16 +451,14 @@ def grade_task_candidate(
     if not candidate_path.is_file():
         raise FileNotFoundError(f"Candidate file not found: {candidate_path}")
 
-    # Resolve and validate types path (prevent directory traversal outside task_dir)
+    # Resolve and validate types path strictly for the requested variant (no silent fallback to variant A)
     types_path = (task_dir / "variants" / variant / "workspace" / types_rel).resolve()
-    if not types_path.is_file():
-        types_path = (task_dir / "variants" / "A" / "workspace" / types_rel).resolve()
     try:
         types_path.relative_to(task_dir)
     except ValueError:
         raise ValueError(f"types_file '{types_rel}' resolves outside task directory: {types_path}")
     if not types_path.is_file():
-        raise FileNotFoundError(f"Types file not found: {types_path}")
+        raise FileNotFoundError(f"Types file not found in variant '{variant}' workspace: {types_path}")
 
     # Resolve and validate test paths (prevent directory traversal outside task_dir)
     test_paths: list[Path] = []
@@ -442,4 +487,6 @@ def grade_task_candidate(
         module_name=module_name,
         timeout=timeout,
         diagnostic_categories=diag,
+        trust_level=trust_level,
+        backend=backend,
     )

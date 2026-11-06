@@ -114,3 +114,28 @@ docker run --rm \
    - Host purges `${SCRATCH_DIR}` completely.
    - If container exceeds execution timeout, host issues `docker kill` and logs a timeout failure.
 
+---
+
+## 3. Execution Backend Architecture & Fail-Closed Behavior
+
+Atavism implements an explicit dual execution backend in `src/atavism/execution.py`:
+
+### 3.1 Backend Classification
+
+1. **`ContainerExecutionBackend` (Untrusted Candidate Sandbox):**
+   - Implements the hardened OCI/Docker container runner.
+   - Checks container daemon availability via `is_available()`.
+   - On Windows hosts, verifies that Docker is operating with Linux containers (`OSType == "linux"`), since Windows container mode does not support Linux capability dropping (`--cap-drop=ALL`), read-only root filesystems (`--read-only`), or Linux security options (`--security-opt=no-new-privileges`).
+   - If Docker or Linux container support is absent, **fails closed** by raising `UntrustedExecutionUnavailableError`. It **never** silently falls back to host execution.
+
+2. **`TrustedLocalBackend` (Trusted Development & Unit Testing):**
+   - Implements host subprocess execution with environment scrubbing (`SAFE_SYSTEM_ENV_VARS`).
+   - Explicitly marked for trusted internal benchmark development, reference solution testing, and mutation audits.
+   - Requires explicit opt-in via `trust_level="trusted-local"` (or CLI `--trust-level trusted-local`).
+
+### 3.2 CLI and API Security Defaults
+
+- **CLI Default:** `atavism grade <task> <variant> <candidate>` defaults to `--trust-level untrusted`. On systems without an active Docker engine, it fails closed with exit code 2 and a security error message.
+- **Python API Default:** `grade_task_candidate(..., trust_level="trusted-local")` allows existing offline unit test suites and mutant runners to operate, while `grade_task_candidate(..., trust_level="untrusted")` enforces container sandbox execution or fails closed.
+
+

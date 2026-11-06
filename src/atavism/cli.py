@@ -95,7 +95,13 @@ def cmd_grade(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        result = grade_task_candidate(task_dir, variant, candidate_path, timeout=args.timeout)
+        result = grade_task_candidate(
+            task_dir,
+            variant,
+            candidate_path,
+            timeout=args.timeout,
+            trust_level=args.trust_level,
+        )
     except Exception as e:
         print(f"Error executing grader: {e}", file=sys.stderr)
         return 1
@@ -150,6 +156,12 @@ def main(argv: list[str] | None = None) -> int:
     grd.add_argument("variant", help="Variant identifier (A or B)")
     grd.add_argument("candidate", help="Path to candidate file")
     grd.add_argument("--timeout", type=int, default=60, help="Test execution timeout in seconds")
+    grd.add_argument(
+        "--trust-level",
+        choices=["untrusted", "trusted-local"],
+        default="untrusted",
+        help="Trust level for execution: 'untrusted' requires container sandbox (default); 'trusted-local' runs in un-sandboxed host environment",
+    )
 
     args = parser.parse_args(argv)
 

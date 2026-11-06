@@ -1,4 +1,2 @@
-# Development and evaluation dependencies for Atavism
+# Direct dependencies for Atavism benchmark evaluation
 pytest>=8.0.0
-pytest-timeout>=2.2.0
-

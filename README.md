@@ -203,7 +203,7 @@ $env:PYTHONPATH = "src" ; python -m pytest tests/ -v --tb=short
 
 Expected output:
 ```text
-============================= 78 passed in ~27s =============================
+============================= 162 passed in ~172s =============================
 ```
 
 ### Running the Paired-Task Diff Auditor
@@ -258,71 +258,78 @@ Pair Audit: benchmark\tasks\T02_pagination_authority
 - **T02 Reference (`solution.py`):**
   - Passes 100% of the hidden test suite (continuation, termination, cycle detection, opacity preservation, duplicate preservation, page limits, error propagation).
 
-### Mutation Testing Suites
-Each task includes 9 distinct mutation fixtures verifying that faulty candidates are caught by the grader:
+### Mutation Testing Suites & Reconciled Classification
+Atavism enforces 28 distinct mutation fixtures across T01–T03. **Kill rate: 28/28 (100%)**.
+
+Detection mechanisms are transparently categorized to distinguish direct behavioral assertions from strict mock exhaustion guards and protocol limits:
+
+| Detection Mechanism | T01 Mutants | T02 Mutants | T03 Mutants | Total |
+| :--- | :---: | :---: | :---: | :---: |
+| **Explicit Behavioral Assertion** (`AssertionError`, `pytest.raises`) | 4 | 5 | 8 | **17** |
+| **Strict Mock / Fake Guard** (`FakeTransport` exhausted, `FakeFetcher` KeyError) | 5 | 3 | 0 | **8** |
+| **Unauthorized Domain Exception** (`IdempotencyConflict` on independent key) | 0 | 0 | 2 | **2** |
+| **Protocol Violation** (Cycle runaway caught by `max_pages` limit) | 0 | 1 | 0 | **1** |
+| **Total Mutants Evaluated & Killed** | **9** | **9** | **10** | **28** |
+
+*Reconciliation Note:* All 28 mutants are killed ($17 + 8 + 2 + 1 = 28$). No mutants survived, and none remain unclassified.
 
 #### T01 Mutants (Convention Divergence)
-1. `retry_all_errors` (retries any $\ge 400$)
-2. `ignore_error_code` (ignores error code string)
-3. `off_by_one_attempts` (max_attempts off-by-one)
-4. `ignore_retry_after` (ignores Retry-After header)
-5. `wrong_backoff_formula` (incorrect exponent)
-6. `no_idempotency_check` (retries unsafe methods without key)
-7. `ignore_deadline` (fails to budget time)
-8. `swallow_exceptions` (swallows transport errors)
-9. `treatment_as_control` (uses control behavior in treatment)
+1. `retry_all_errors`: Strict mock guard (`FakeTransport exhausted`)
+2. `ignore_error_code`: Strict mock guard (`FakeTransport exhausted`)
+3. `off_by_one_attempts`: Strict mock guard (`FakeTransport exhausted`)
+4. `ignore_retry_after`: Explicit behavioral assertion (`assert [1.0] == [5.0]`)
+5. `wrong_backoff_formula`: Explicit behavioral assertion (backoff sequence comparison)
+6. `no_idempotency_check`: Strict mock guard (`FakeTransport exhausted`)
+7. `ignore_deadline`: Strict mock guard (`FakeTransport exhausted`)
+8. `swallow_exceptions`: Explicit behavioral assertion (`pytest.raises(ConnectionError)`)
+9. `treatment_as_control`: Explicit behavioral assertion (`assert 409 == 200`)
 
 #### T02 Mutants (Specification Conflict Resolution)
-1. `mutant_cursor_driven_continuation` (follows misleading legacy comment; continues if next_cursor is present)
-2. `mutant_has_more_as_advisory` (treats has_more as advisory; continues on next_cursor even if has_more=False)
-3. `mutant_stop_when_missing_cursor` (stops quietly when next_cursor is missing instead of raising error)
-4. `mutant_deduplicate_items` (deduplicates records during aggregation)
-5. `mutant_sort_items` (reorders/sorts records)
-6. `mutant_strip_cursor` (modifies opaque cursor by stripping whitespace)
-7. `mutant_no_cycle_detection` (fails to detect repeated cursors)
-8. `mutant_silent_partial_on_limit` (silently returns partial results on page limit)
-9. `mutant_swallow_exceptions` (swallows fetcher exceptions)
+1. `mutant_cursor_driven_continuation`: Strict mock guard (`FakeFetcher KeyError` on unexpected continuation)
+2. `mutant_has_more_as_advisory`: Strict mock guard (`FakeFetcher KeyError` on unexpected continuation)
+3. `mutant_stop_when_missing_cursor`: Explicit behavioral assertion (`pytest.raises(PaginationProtocolError)`)
+4. `mutant_deduplicate_items`: Explicit behavioral assertion (duplicate preservation check)
+5. `mutant_sort_items`: Explicit behavioral assertion (order preservation check)
+6. `mutant_strip_cursor`: Strict mock guard (`FakeFetcher KeyError` on whitespace-stripped cursor)
+7. `mutant_no_cycle_detection`: Protocol violation (`PaginationLimitExceeded: limit reached`)
+8. `mutant_silent_partial_on_limit`: Explicit behavioral assertion (`pytest.raises(PaginationLimitExceeded)`)
+9. `mutant_swallow_exceptions`: Explicit behavioral assertion (`pytest.raises(ConnectionError)`)
 
 #### T03 Mutants (Tenant Isolation and Idempotency Scope)
-1. `MutantGlobalKeyService` (uses raw idempotency key in Treatment, omitting tenant scoping)
-2. `MutantTenantIgnoredService` (omits tenant check during retrieval, leaking cross-tenant records)
-3. `MutantPayloadBlindService` (returns previous result without detecting payload conflicts)
-4. `MutantDuplicateCreationService` (always creates new reservations, ignoring idempotency)
-5. `MutantReplayAllocationService` (calls id_factory on replay, consuming extra identifiers)
-6. `MutantConflictMutationService` (mutates stored reservation state when conflict occurs)
-7. `MutantValidationOrderService` (returns existing result before validating incoming request)
-8. `MutantBooleanQuantityService` (accepts boolean True as integer quantity)
-9. `MutantCrossTenantLeakService` (returns foreign reservation during key collision in Control)
-10. `MutantTenantKeyCollisionService` (incorrectly blocks cross-tenant keys in Treatment)
+1. `MutantGlobalKeyService`: Unauthorized domain exception (`IdempotencyConflict` on cross-tenant reuse in Treatment)
+2. `MutantTenantIgnoredService`: Explicit behavioral assertion (cross-tenant record retrieval returns None)
+3. `MutantPayloadBlindService`: Explicit behavioral assertion (`pytest.raises(IdempotencyConflict)`)
+4. `MutantDuplicateCreationService`: Explicit behavioral assertion (replayed reservation matches stored identity)
+5. `MutantReplayAllocationService`: Explicit behavioral assertion (generator call count unchanged on replay)
+6. `MutantConflictMutationService`: Explicit behavioral assertion (stored state unchanged after conflict)
+7. `MutantValidationOrderService`: Explicit behavioral assertion (validation precedes idempotency check)
+8. `MutantBooleanQuantityService`: Explicit behavioral assertion (`pytest.raises(ValueError)`)
+9. `MutantCrossTenantLeakService`: Explicit behavioral assertion (`pytest.raises(IdempotencyConflict)`)
+10. `MutantTenantKeyCollisionService`: Unauthorized domain exception (`IdempotencyConflict` on independent key in Treatment)
 
 ---
 
 ## 7. Security Architecture & Execution Boundaries
 
-Candidate evaluation is executed through a metadata-driven harness (`src/atavism/grading.py`):
+Candidate evaluation is executed through a metadata-driven harness (`src/atavism/grading.py` and `src/atavism/execution.py`):
 
-1. **Local Subprocess Sandbox (Development & Verification):**
-   - Applies strict environment scrubbing via allowlist (`SAFE_SYSTEM_ENV_VARS`), stripping API keys, tokens, SSH vars, and cloud credentials.
-   - Enforces a hard execution timeout (default 60s) and working-directory sandboxing.
-   - *Security Notice:* Environment scrubbing prevents credential leakage but does **not** provide kernel-level filesystem or network virtualization.
-2. **Containerized Jail Specification (Untrusted Candidate Trials):**
-   - Detailed in [`docs/security_and_container_design.md`](docs/security_and_container_design.md).
-   - Specifies `--network none`, `--read-only`, unprivileged user (`nobody:nogroup`), capability dropping (`--cap-drop=ALL`), and cgroup resource limits.
+1. **Dual Execution Backend Architecture:**
+   - **`ContainerExecutionBackend` (Untrusted Candidate Sandbox):** Enforces OCI/Docker container isolation with `--network=none`, `--read-only`, `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--user=65534:65534`, and explicit memory/CPU/PID limits. If container isolation is unavailable, execution **fails closed**.
+   - **`TrustedLocalBackend` (Trusted Development & Unit Testing):** Executes via host subprocess with environment scrubbing (`SAFE_SYSTEM_ENV_VARS`). Intended strictly for trusted internal reference testing and requires explicit opt-in (`--trust-level trusted-local`).
+2. **Explicit Fail-Closed Boundary:**
+   - The CLI (`atavism grade`) defaults to `--trust-level untrusted`. On development hosts without Docker or on Windows hosts without Linux container support, grading untrusted candidates halts immediately with a clear security failure (`return_code=126`). Host execution is never silently substituted for a sandbox.
+   - For complete specifications, see [`docs/security_and_container_design.md`](docs/security_and_container_design.md).
 
 ---
 
-## 8. Limitations and Known Methodological Considerations
+## 8. Limitations and Evaluation Protocol
 
 ### Current Limitations
-1. **Benchmark Scope:** Tasks T01, T02, and T03 are fully implemented and validated; tasks T04–T05 remain staged.
-2. **Subprocess Execution Boundary:** Candidate evaluation currently uses process-level subprocess isolation with environment scrubbing; containerized sandboxing (`--network none`) is required for untrusted model execution.
+1. **Benchmark Scope:** Tasks T01, T02, and T03 are fully implemented and verified (162 unit tests, 28/28 mutants killed); tasks T04–T05 remain staged.
+2. **Subprocess Execution Boundary:** Local development host execution relies on environment scrubbing and is not an OS sandbox. Container isolation must be used for untrusted model code.
 3. **Synthetic API Provider:** Meridian Gateway is synthetic to ensure clean isolation of experimental variables without external API changes or rate limits.
-4. **The Stub-Overwrite Confounder in T02:** In file-completion tasks, models often overwrite function stubs wholesale. Passing Variant B demonstrates specification compliance in the presence of conflicting comments, but cannot be claimed as definitive proof of deliberate cognitive conflict arbitration. The primary valid metric is the cross-variant delta ($\text{PassRate}_A - \text{PassRate}_B$).
-
-### Next Steps
-1. **Conduct Model Evaluation Trials:** Execute multi-trial evaluations (3–5 trials per variant) across frontier models on T01, T02, and T03.
-2. **Statistical Analysis:** Compute pass@1, pass@k, and control-versus-treatment delta $\Delta = \text{pass}(B) - \text{pass}(A)$.
-3. **Stage T04/T05 Development:** Implement Uncertainty Handling and Contract Consistency.
+4. **The Stub-Overwrite Confounder in T02:** In file-completion tasks, models often overwrite function stubs wholesale. Passing Variant B demonstrates specification compliance in the presence of conflicting comments, but cannot be claimed as definitive proof of deliberate cognitive conflict arbitration.
+5. **Formal Evaluation Protocol:** Complete trial independence rules, metrics definitions, and provenance schemas are documented in [`docs/evaluation_protocol.md`](docs/evaluation_protocol.md).
 
 ---
 
@@ -330,7 +337,7 @@ Candidate evaluation is executed through a metadata-driven harness (`src/atavism
 
 - **Python Runtime Matrix:** Continuous Integration is configured via [GitHub Actions](.github/workflows/ci.yml) testing Python 3.11, 3.12, 3.13, and 3.14 across Ubuntu and Windows platforms.
 - **Local Verification:** Local runtime verification was conducted under Python 3.14.6 (win32); AST and bytecode syntax compilation verified compatible with Python 3.11+.
-- **Pinned Dependencies:** All test and evaluation dependencies are pinned in `requirements-lock.txt`.
+- **Pinned Dependencies:** All test and evaluation direct and transitive dependencies are pinned in `requirements-lock.txt` (`colorama`, `iniconfig`, `packaging`, `pluggy`, `pygments`, `pytest`).
 
 ### Quickstart Execution Commands
 
@@ -338,8 +345,7 @@ Candidate evaluation is executed through a metadata-driven harness (`src/atavism
 # 1. Install pinned dependencies
 pip install -r requirements-lock.txt
 
-# 2. Run full pytest regression suite
-$env:PYTHONPATH = "src"
+# 2. Run full pytest regression suite (162 passed in ~172s)
 python -m pytest tests/ -v --tb=short
 
 # 3. Run task pair audits (verifies minimal delta between A/B variants)
@@ -350,10 +356,13 @@ python scripts/audit_pair.py benchmark/tasks/T03_tenant_idempotency
 # 4. Run mutation fixture audits (verifies all 28 mutants are caught)
 python scripts/audit_mutants.py
 
-# 5. Run CLI task validation
+# 5. Run CLI task validation (verifies clean workspace isolation)
 python -m atavism.cli validate benchmark/tasks/T01_retry_semantics
 python -m atavism.cli validate benchmark/tasks/T02_pagination_authority
 python -m atavism.cli validate benchmark/tasks/T03_tenant_idempotency
+
+# 6. Run CLI grading with explicit trust level
+python -m atavism.cli grade benchmark/tasks/T01_retry_semantics A benchmark/tasks/T01_retry_semantics/private/reference/control.py --trust-level trusted-local
 ```
 
 ---

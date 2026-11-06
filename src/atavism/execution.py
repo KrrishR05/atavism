@@ -239,6 +239,17 @@ class ContainerExecutionBackend(ExecutionBackend):
                 text=True,
                 timeout=timeout,
             )
+            combined_output = f"{proc.stdout or ''}\n{proc.stderr or ''}".lower()
+            if (
+                proc.returncode in {125, 126, 127}
+                or "oci runtime create failed" in combined_output
+                or "error response from daemon" in combined_output
+                or "no module named pytest" in combined_output
+            ):
+                raise UntrustedExecutionUnavailableError(
+                    "Untrusted candidate execution failed closed: "
+                    "Container sandbox execution unavailable: runtime failed to launch isolated test process."
+                )
             return ExecutionResult(
                 return_code=proc.returncode,
                 stdout=proc.stdout or "",
@@ -252,4 +263,3 @@ class ContainerExecutionBackend(ExecutionBackend):
                 stderr=exc.stderr or f"Container execution timed out after {timeout} seconds.",
                 timed_out=True,
             )
-

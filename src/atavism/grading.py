@@ -13,7 +13,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -211,7 +210,7 @@ def grade_candidate(
         try:
             exec_res = backend.execute(
                 [
-                    sys.executable,
+                    "python",
                     "-m",
                     "pytest",
                     str(test_dir),

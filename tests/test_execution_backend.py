@@ -119,6 +119,19 @@ class TestBackendAvailabilityAndFailClosed:
         assert "Untrusted candidate execution failed closed" in str(exc_info.value)
         assert "Host execution is not an OS sandbox" in str(exc_info.value)
 
+    def test_untrusted_execute_fails_closed_on_container_runtime_launch_error(self) -> None:
+        backend = ContainerExecutionBackend(docker_path="docker")
+        mock_proc = MagicMock(
+            returncode=127,
+            stdout="",
+            stderr="docker: Error response from daemon: OCI runtime create failed",
+        )
+        with patch.object(backend, "is_available", return_value=(True, "ok")):
+            with patch("subprocess.run", return_value=mock_proc):
+                with pytest.raises(UntrustedExecutionUnavailableError) as exc_info:
+                    backend.execute(["python", "-m", "pytest"], cwd=Path("."), env={}, timeout=5)
+        assert "Container sandbox execution unavailable" in str(exc_info.value)
+
     def test_grade_candidate_untrusted_returns_security_error_when_container_unavailable(self) -> None:
         res = grade_candidate(
             candidate_path=T01_REF_CONTROL,
@@ -194,6 +207,24 @@ class TestTrustedLocalBackendValidation:
                 trust_level="trusted-local",
             )
 
+    def test_grade_candidate_uses_portable_python_command(self) -> None:
+        backend = MagicMock()
+        backend.execute.return_value = ExecutionResult(return_code=0, stdout="", stderr="", timed_out=False)
+
+        grade_candidate(
+            candidate_path=T01_REF_CONTROL,
+            types_path=T01_TYPES,
+            test_dirs=[T01_COMMON],
+            conftest_path=T01_CONFTEST,
+            package_name="atavism_retry",
+            module_name="client.py",
+            trust_level="trusted-local",
+            backend=backend,
+        )
+
+        command = backend.execute.call_args.args[0]
+        assert command[:3] == ["python", "-m", "pytest"]
+
 
 class TestCliTrustLevelIntegration:
     """Verify that CLI defaults to fail-closed untrusted execution."""
@@ -222,4 +253,3 @@ class TestCliTrustLevelIntegration:
         assert exit_code == 0
         captured = capsys.readouterr()
         assert "PASSED" in captured.out
-

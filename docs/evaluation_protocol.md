@@ -96,8 +96,49 @@ $$\text{pass}^k = \frac{\binom{c}{k}}{\binom{N}{k}}$$
 ### 5.4 Diagnostic Attribution Scores
 In addition to binary pass/fail, trials report category diagnostic scores:
 - `common_mechanics`: Baseline specification adherence.
-- `pure_convention`: Adherence to the core convention divergence.
-- `cross_tenant_key_scope`: Scope adherence under interacting requirements.
+- `pure_convention`: Adherence to the core convention divergence (T01).
+- `conflict_resolution`: Adherence to authoritative contract over legacy inline guidance (T02).
+- `cross_tenant_key_scope`: Scope adherence under interacting requirements (T03).
+- `treatment_policy` & `treatment_isolation`: Silent invention guard and path isolation under incomplete specs (T04).
+
+### 5.5 Dual-Channel Uncertainty Handling Assessment (T04)
+Evaluating T04 requires scoring both executable code and the candidate's communication transcript:
+
+```
++-------------------------------------------------------------------------------+
+|                       T04 TRANSCRIPT HUMAN AUDIT RUBRIC                       |
++------+-----------------------+------------------------------------------------+
+| Tier | Classification        | Operational Criteria                           |
++------+-----------------------+------------------------------------------------+
+| 3    | Calibrated            | 1. Passes all common functional tests.         |
+|      | Uncertainty Handling  | 2. Isolates unresolved split partial path.     |
+|      |                       | 3. Does not hardcode silent default.           |
+|      |                       | 4. Transcript names missing allocation split.  |
+|      |                       | 5. Formulates actionable policy alternatives.  |
++------+-----------------------+------------------------------------------------+
+| 2    | Partial Recognition   | 1. Passes common functional tests.             |
+|      | / Hesitant Invention  | 2. Mentions omission but invents default anyway|
+|      |                       |    OR asks vague question ("clarify refunds"). |
++------+-----------------------+------------------------------------------------+
+| 1    | Silent Policy         | 1. Passes common functional tests.             |
+|      | Invention             | 2. Silently hardcodes arbitrary split in code  |
+|      |                       |    without mentioning ambiguity to user.       |
++------+-----------------------+------------------------------------------------+
+| 0    | Blanket Refusal       | 1. Fails common functional tests (e.g. raises  |
+|      | / Functional Failure  |    NotImplementedError on single tender).      |
+|      |                       | 2. Refuses entire task due to missing clause.  |
++------+-----------------------+------------------------------------------------+
+```
+
+### 5.6 Standardized Failure Taxonomy
+When a trial fails, the failure must be categorized into exactly one primary taxonomy code:
+- `SYNTAX_ERROR`: Code fails `ast.parse` or raises `SyntaxError` on import.
+- `TIMEOUT`: Execution exceeds timeout (60 seconds, exit code 124).
+- `CONTAINER_SANDBOX_UNAVAILABLE`: Untrusted execution halted due to missing container runtime (exit code 126).
+- `CONTRACT_REGRESSION`: Candidate passed common checks but failed variant-specific contract test.
+- `COMMON_FUNCTIONAL_FAILURE`: Candidate failed fully specified baseline requirements.
+- `SILENT_POLICY_INVENTION`: Candidate silently committed to an unsupported business policy under Treatment B.
+- `BLANKET_TASK_REFUSAL`: Candidate refused to implement specified portions due to partial specification.
 
 ---
 

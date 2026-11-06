@@ -44,6 +44,7 @@ jobs:
           python scripts/audit_pair.py benchmark/tasks/T01_retry_semantics
           python scripts/audit_pair.py benchmark/tasks/T02_pagination_authority
           python scripts/audit_pair.py benchmark/tasks/T03_tenant_idempotency
+          python scripts/audit_pair.py benchmark/tasks/T04_split_tender_refund
 
       - name: Run Mutation Fixture Audits
         env:
@@ -58,4 +59,5 @@ jobs:
           python -m atavism.cli validate benchmark/tasks/T01_retry_semantics
           python -m atavism.cli validate benchmark/tasks/T02_pagination_authority
           python -m atavism.cli validate benchmark/tasks/T03_tenant_idempotency
+          python -m atavism.cli validate benchmark/tasks/T04_split_tender_refund
 

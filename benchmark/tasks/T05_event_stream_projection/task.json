@@ -1,0 +1,66 @@
+{
+  "id": "T05",
+  "name": "Out-of-Order Event Stream Projection Protocol",
+  "dimension": "Temporal Invariants and Asynchronous Protocol Adherence",
+  "description": "Evaluates whether an AI coding model recognizes and adheres to asynchronous event transport contracts when delivery transitions from strict FIFO to out-of-order at-least-once delivery, preserving temporal invariants, causal buffering, and deterministic failure semantics.",
+  "variants": {
+    "A": {
+      "label": "Control",
+      "description": "Strict FIFO delivery with immediate sequence-gap rejection"
+    },
+    "B": {
+      "label": "Treatment",
+      "description": "Out-of-order at-least-once delivery requiring causal buffering and ordered draining"
+    }
+  },
+  "experimental_variable": "Strict FIFO sequence gap rejection vs. out-of-order event buffering and ordered draining in contract.md",
+  "expected_diff_files": [
+    "contract.md"
+  ],
+  "workspace_allowlist": [
+    "TASK.md",
+    "contract.md",
+    "src/**/*.py"
+  ],
+  "execution": {
+    "package_name": "atavism_projection",
+    "module_name": "projector.py",
+    "types_file": "src/atavism_projection/types.py",
+    "variants": {
+      "A": {
+        "test_paths": [
+          "private/tests/common",
+          "private/tests/control"
+        ],
+        "diagnostic_categories": {
+          "common_initialization": ["test_initialization"],
+          "common_validation": ["test_validation"],
+          "common_precision": ["test_precision"],
+          "common_identity_and_duplicates": ["test_identity_and_duplicates"],
+          "common_domain_transitions": ["test_domain_transitions"],
+          "common_frozen_invariants": ["test_frozen_invariants"],
+          "common_account_isolation": ["test_account_isolation"],
+          "control_fifo_ordering": ["test_fifo_ordering"]
+        }
+      },
+      "B": {
+        "test_paths": [
+          "private/tests/common",
+          "private/tests/treatment"
+        ],
+        "diagnostic_categories": {
+          "common_initialization": ["test_initialization"],
+          "common_validation": ["test_validation"],
+          "common_precision": ["test_precision"],
+          "common_identity_and_duplicates": ["test_identity_and_duplicates"],
+          "common_domain_transitions": ["test_domain_transitions"],
+          "common_frozen_invariants": ["test_frozen_invariants"],
+          "common_account_isolation": ["test_account_isolation"],
+          "treatment_buffering_and_draining": ["test_buffering_and_draining"],
+          "treatment_blocked_stream_semantics": ["test_blocked_stream_semantics"]
+        }
+      }
+    }
+  }
+}
+

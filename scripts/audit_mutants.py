@@ -20,6 +20,7 @@ T01_DIR = ROOT / "benchmark" / "tasks" / "T01_retry_semantics"
 T02_DIR = ROOT / "benchmark" / "tasks" / "T02_pagination_authority"
 T03_DIR = ROOT / "benchmark" / "tasks" / "T03_tenant_idempotency"
 T04_DIR = ROOT / "benchmark" / "tasks" / "T04_split_tender_refund"
+T05_DIR = ROOT / "benchmark" / "tasks" / "T05_event_stream_projection"
 
 
 def audit_t01_mutants() -> list[dict[str, object]]:
@@ -235,6 +236,59 @@ def audit_t04_mutants() -> list[dict[str, object]]:
     return results
 
 
+def audit_t05_mutants() -> list[dict[str, object]]:
+    mutants_path = T05_DIR / "private" / "mutants" / "__init__.py"
+    code = mutants_path.read_text(encoding="utf-8")
+
+    mutants = [
+        ("MutantDropFutureEvents", "Discards out-of-order events without buffering", [T05_DIR / "private" / "tests" / "treatment"]),
+        ("MutantPrematureApplication", "Immediately applies out-of-order events without buffering", [T05_DIR / "private" / "tests" / "treatment"]),
+        ("MutantReplayDuplicate", "Re-applies duplicate events mutating balance", [T05_DIR / "private" / "tests" / "common"]),
+        ("MutantAcceptConflict", "Silently accepts conflicting duplicate payloads", [T05_DIR / "private" / "tests" / "common"]),
+        ("MutantCrossAccountBufferLeak", "Shares pending buffer across accounts", [T05_DIR / "private" / "tests" / "treatment"]),
+        ("MutantFrozenBypassOnDrain", "Allows buffered deposits to commit after a buffered freeze", [T05_DIR / "private" / "tests" / "treatment"]),
+        ("MutantRollbackCommittedOnDrainFail", "Rolls back committed events when drain fails", [T05_DIR / "private" / "tests" / "treatment"]),
+        ("MutantBypassBlockedSequence", "Applies later events when predecessor sequence is blocked", [T05_DIR / "private" / "tests" / "treatment"]),
+        ("MutantSilentUnblockedOnFailure", "Fails to set is_blocked and blocked_sequence_id on failure", [T05_DIR / "private" / "tests" / "treatment"]),
+        ("MutantFloatPrecision", "Uses float arithmetic and permits excess decimal precision", [T05_DIR / "private" / "tests" / "common"]),
+    ]
+
+    results = []
+    for cls_name, desc, tdirs in mutants:
+        with tempfile.TemporaryDirectory(prefix=f"t05_mut_{cls_name}_") as td:
+            cand = Path(td) / "projector.py"
+            cand.write_text(
+                f"{code}\nAccountProjector = {cls_name}\n",
+                encoding="utf-8",
+            )
+            res = grade_candidate(
+                candidate_path=cand,
+                types_path=T05_DIR / "variants" / "A" / "workspace" / "src" / "atavism_projection" / "types.py",
+                test_dirs=tdirs,
+                conftest_path=T05_DIR / "private" / "tests" / "conftest.py",
+                package_name="atavism_projection",
+                module_name="projector.py",
+                timeout=30,
+            )
+
+            first_fail_test = ""
+            first_fail_reason = ""
+            for tname, reason in res.failure_reasons.items():
+                first_fail_test = tname.split("::")[-1]
+                first_fail_reason = reason.split("\n")[0][:100]
+                break
+
+            results.append({
+                "mutant": cls_name,
+                "description": desc,
+                "killed": not res.passed,
+                "failed_tests_count": res.failed_tests,
+                "first_rejecting_test": first_fail_test,
+                "rejection_reason": first_fail_reason,
+            })
+    return results
+
+
 def main() -> None:
     print("=" * 80)
     print("T01 MUTATION AUDIT (Retry Semantics)")
@@ -289,6 +343,19 @@ def main() -> None:
         print(f"       Behavioral intent:      {r['description']}\n")
 
     print("=" * 80)
+    print("T05 MUTATION AUDIT (Event Stream Projection Protocol)")
+    print("=" * 80)
+    t05_res = audit_t05_mutants()
+    killed_t05 = sum(1 for r in t05_res if r["killed"])
+    print(f"Killed mutants: {killed_t05}/{len(t05_res)} | Surviving: {len(t05_res) - killed_t05}\n")
+    for r in t05_res:
+        status = "[KILLED]" if r["killed"] else "[SURVIVED]"
+        print(f"{status} {r['mutant']} ({r['failed_tests_count']} tests failed)")
+        print(f"       Primary rejecting test: {r['first_rejecting_test']}")
+        print(f"       Rejection reason:       {r['rejection_reason']}")
+        print(f"       Behavioral intent:      {r['description']}\n")
+
+    print("=" * 80)
     print("MUTATION CLASSIFICATION & RECONCILIATION SUMMARY")
     print("=" * 80)
     all_mutants = []
@@ -300,6 +367,8 @@ def main() -> None:
         all_mutants.append(("T03", r["mutant"], r["rejection_reason"]))
     for r in t04_res:
         all_mutants.append(("T04", r["mutant"], r["rejection_reason"]))
+    for r in t05_res:
+        all_mutants.append(("T05", r["mutant"], r["rejection_reason"]))
 
     cat_counts: dict[str, int] = {
         "Explicit behavioral assertion": 0,

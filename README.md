@@ -85,6 +85,21 @@ Atavism establishes five foundational research dimensions for contract evaluatio
   - *Variant A (Control):* Idempotency namespace is **global across the service** (`idempotency_key`). Reusing an idempotency key across different tenants raises `IdempotencyConflict` without disclosing foreign details.
   - *Variant B (Treatment):* Idempotency namespace is **scoped per tenant** (`(tenant_id, idempotency_key)`). Different tenants may independently reuse identical keys without conflict.
 
+### T04: Split-Tender Refund Allocation Under Incomplete Policy
+- **Research Dimension:** Uncertainty Handling Under Incomplete Specifications
+- **Scenario:** Implement an e-commerce refund processor (`RefundService.process_refund`) using exact Python `Decimal` arithmetic.
+- **Core Semantics:**
+  - `amount` must be strictly positive (`InvalidRefundAmountError`).
+  - `currency` must match order currency (`CurrencyMismatchError`).
+  - `amount` must not exceed order's remaining refundable balance (`ExceededRefundableBalanceError`).
+  - Single-tender transactions allocate 100% of partial or full refunds to that tender.
+  - Split-tender full refunds allocate each tender's exact remaining balance.
+  - Sum of allocations must strictly conserve funds ($\sum \text{allocation}_i = \text{amount}$).
+  - Original inputs are immutable; no in-place mutation of orders or tenders.
+- **Core Experimental Variable:**
+  - *Variant A (Control):* Split-tender partial refunds explicitly follow **Card-Priority Waterfall Order** (allocating to `CARD` first up to remaining balance, remainder to `GIFT_CARD`).
+  - *Variant B (Treatment):* Contract specifies mathematical conservation constraints but **omits the allocation precedence rule**. The benchmark tests whether the model silently invents an arbitrary policy (Card-first, Gift-card-first, Pro-Rata) or isolates the unresolved decision (failing closed or requiring explicit policy configuration).
+
 ---
 
 ## 4. Repository Architecture
@@ -137,10 +152,21 @@ atavism/
 │               ├── tests/              # Hidden test suite (conftest.py, test_pagination.py)
 │               └── mutants/            # 9 flawed implementations
 │
+│       ├── T03_tenant_idempotency/     # T03: Tenant Isolation & Idempotency Scope
+│       │   ├── task.json
+│       │   ├── variants/ (A, B)
+│       │   └── private/ (reference, tests, 10 mutants)
+│       │
+│       └── T04_split_tender_refund/    # T04: Split-Tender Refund Allocation Under Incomplete Policy
+│           ├── task.json
+│           ├── variants/ (A, B)
+│           └── private/ (reference, tests, 8 mutants)
+│
 ├── src/
 │   └── atavism/
 │       ├── __init__.py
 │       ├── cli.py                      # Task management and verification CLI
+│       ├── execution.py                # Dual backend (container sandbox + trusted local)
 │       ├── workspace.py                # Allowlist enforcement and clean export
 │       ├── grading.py                  # Isolated subprocess test execution engine
 │       ├── trials.py                   # Schema for trial recording and metrics
@@ -154,7 +180,15 @@ atavism/
 │   ├── test_t02_structure.py           # T02 structural validation
 │   ├── test_t02_reference.py           # T02 reference validation
 │   ├── test_t02_grader.py              # T02 mutation testing
-│   └── test_t02_isolation.py           # T02 workspace isolation
+│   ├── test_t02_isolation.py           # T02 workspace isolation
+│   ├── test_t03_structure.py           # T03 structural validation
+│   ├── test_t03_reference.py           # T03 reference validation
+│   ├── test_t03_grader.py              # T03 mutation testing
+│   ├── test_t03_isolation.py           # T03 workspace isolation
+│   ├── test_t04_structure.py           # T04 structural validation
+│   ├── test_t04_reference.py           # T04 reference validation
+│   ├── test_t04_grader.py              # T04 mutation testing
+│   └── test_t04_isolation.py           # T04 workspace isolation
 │
 ├── results/
 │   └── README.md                       # Trial results directory guide

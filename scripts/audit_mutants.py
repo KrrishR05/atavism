@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 T01_DIR = ROOT / "benchmark" / "tasks" / "T01_retry_semantics"
 T02_DIR = ROOT / "benchmark" / "tasks" / "T02_pagination_authority"
 T03_DIR = ROOT / "benchmark" / "tasks" / "T03_tenant_idempotency"
+T04_DIR = ROOT / "benchmark" / "tasks" / "T04_split_tender_refund"
 
 
 def audit_t01_mutants() -> list[dict[str, object]]:
@@ -183,6 +184,57 @@ def audit_t03_mutants() -> list[dict[str, object]]:
     return results
 
 
+def audit_t04_mutants() -> list[dict[str, object]]:
+    mutants_path = T04_DIR / "private" / "mutants" / "__init__.py"
+    code = mutants_path.read_text(encoding="utf-8")
+
+    mutants = [
+        ("MutantSilentCardFirst", "Silently adopts Card-First Waterfall in Treatment B without authorization", [T04_DIR / "private" / "tests" / "common", T04_DIR / "private" / "tests" / "treatment"]),
+        ("MutantSilentGiftCardFirst", "Silently adopts Gift-Card-First Waterfall in Treatment B without authorization", [T04_DIR / "private" / "tests" / "common", T04_DIR / "private" / "tests" / "treatment"]),
+        ("MutantSilentProrata", "Silently adopts Pro-Rata split in Treatment B without authorization", [T04_DIR / "private" / "tests" / "common", T04_DIR / "private" / "tests" / "treatment"]),
+        ("MutantBlanketRefusal", "Refuses all operations when specification is incomplete", [T04_DIR / "private" / "tests" / "common"]),
+        ("MutantFalseUncertainty", "Erroneously treats single-tender refunds as uncertain", [T04_DIR / "private" / "tests" / "common"]),
+        ("MutantConservationViolation", "Violates conservation of funds (allocations sum != amount)", [T04_DIR / "private" / "tests" / "common"]),
+        ("MutantTenderBalanceExceeded", "Allocates more than individual tender remaining balance", [T04_DIR / "private" / "tests" / "common"]),
+        ("MutantSequentialStateCorruption", "Ignores prior refunded_amount across sequential refunds", [T04_DIR / "private" / "tests" / "common"]),
+    ]
+
+    results = []
+    for cls_name, desc, tdirs in mutants:
+        with tempfile.TemporaryDirectory(prefix=f"t04_mut_{cls_name}_") as td:
+            cand = Path(td) / "service.py"
+            cand.write_text(
+                f"{code}\nRefundService = {cls_name}\n",
+                encoding="utf-8",
+            )
+            res = grade_candidate(
+                candidate_path=cand,
+                types_path=T04_DIR / "variants" / "A" / "workspace" / "src" / "atavism_refund" / "types.py",
+                test_dirs=tdirs,
+                conftest_path=T04_DIR / "private" / "tests" / "conftest.py",
+                package_name="atavism_refund",
+                module_name="service.py",
+                timeout=30,
+            )
+
+            first_fail_test = ""
+            first_fail_reason = ""
+            for tname, reason in res.failure_reasons.items():
+                first_fail_test = tname.split("::")[-1]
+                first_fail_reason = reason.split("\n")[0][:100]
+                break
+
+            results.append({
+                "mutant": cls_name,
+                "description": desc,
+                "killed": not res.passed,
+                "failed_tests_count": res.failed_tests,
+                "first_rejecting_test": first_fail_test,
+                "rejection_reason": first_fail_reason,
+            })
+    return results
+
+
 def main() -> None:
     print("=" * 80)
     print("T01 MUTATION AUDIT (Retry Semantics)")
@@ -216,6 +268,26 @@ def main() -> None:
     t03_res = audit_t03_mutants()
     killed_t03 = sum(1 for r in t03_res if r["killed"])
     print(f"Killed mutants: {killed_t03}/{len(t03_res)} | Surviving: {len(t03_res) - killed_t03}\n")
+    for r in t03_res:
+        status = "[KILLED]" if r["killed"] else "[SURVIVED]"
+        print(f"{status} {r['mutant']} ({r['failed_tests_count']} tests failed)")
+        print(f"       Primary rejecting test: {r['first_rejecting_test']}")
+        print(f"       Rejection reason:       {r['rejection_reason']}")
+        print(f"       Behavioral intent:      {r['description']}\n")
+
+    print("=" * 80)
+    print("T04 MUTATION AUDIT (Split-Tender Refund Allocation Under Incomplete Policy)")
+    print("=" * 80)
+    t04_res = audit_t04_mutants()
+    killed_t04 = sum(1 for r in t04_res if r["killed"])
+    print(f"Killed mutants: {killed_t04}/{len(t04_res)} | Surviving: {len(t04_res) - killed_t04}\n")
+    for r in t04_res:
+        status = "[KILLED]" if r["killed"] else "[SURVIVED]"
+        print(f"{status} {r['mutant']} ({r['failed_tests_count']} tests failed)")
+        print(f"       Primary rejecting test: {r['first_rejecting_test']}")
+        print(f"       Rejection reason:       {r['rejection_reason']}")
+        print(f"       Behavioral intent:      {r['description']}\n")
+
     print("=" * 80)
     print("MUTATION CLASSIFICATION & RECONCILIATION SUMMARY")
     print("=" * 80)
@@ -226,6 +298,8 @@ def main() -> None:
         all_mutants.append(("T02", r["mutant"], r["rejection_reason"]))
     for r in t03_res:
         all_mutants.append(("T03", r["mutant"], r["rejection_reason"]))
+    for r in t04_res:
+        all_mutants.append(("T04", r["mutant"], r["rejection_reason"]))
 
     cat_counts: dict[str, int] = {
         "Explicit behavioral assertion": 0,
@@ -239,9 +313,9 @@ def main() -> None:
             cat = "Explicit behavioral assertion"
         elif "FakeTransport exhausted" in reason or "Unexpected cursor passed to FakeFetcher" in reason:
             cat = "Strict mock/fake guard"
-        elif "PaginationLimitExceeded" in reason:
+        elif "PaginationLimitExceeded" in reason or "NotImplementedError" in reason:
             cat = "Protocol violation"
-        elif "IdempotencyConflict" in reason and mname in ("MutantGlobalKeyService", "MutantTenantKeyCollisionService"):
+        elif ("IdempotencyConflict" in reason and mname in ("MutantGlobalKeyService", "MutantTenantKeyCollisionService")) or "RefundError" in reason:
             cat = "Unauthorized domain exception"
         else:
             cat = "Explicit behavioral assertion"
@@ -255,7 +329,7 @@ def main() -> None:
     for cat, count in cat_counts.items():
         print(f"  - {cat:32s}: {count:2d}")
     print("-" * 80)
-    print(f"  Reconciliation Check: 17 + 8 + 2 + 1 = {17+8+2+1} == {len(all_mutants)} (Exact Match)")
+    print(f"  Total Reconciliation: {total_killed} == {len(all_mutants)} (Exact Match)")
     print("=" * 80)
 
 

@@ -79,6 +79,11 @@ In file-completion and code-editing benchmarks, evaluating conflict resolution i
 - **Experimental Variable:** Scope of the idempotency key namespace defined in `contract.md` (Global in Variant A vs. Tenant-Scoped in Variant B).
 - **Target Limitation:** AI coding models implement idempotency and tenant isolation as isolated mechanisms but fail to compose them, treating idempotency lookups globally even when tenant scoping is required.
 
+### T04 — Split-Tender Refund Allocation Under Incomplete Policy
+- **Research Dimension:** Uncertainty Handling Under Incomplete Specifications
+- **Experimental Variable:** Presence of explicit card-first waterfall policy vs. omitted allocation precedence in Section 4.2 of `contract.md`.
+- **Target Limitation:** AI coding models default to silent policy invention when specifications omit consequential business rules (such as split-tender refund precedence), inventing arbitrary heuristics rather than isolating unresolved decisions and seeking clarification.
+
 ## File Allowlist for Workspace Export
 
 Only these files may be included in a model workspace export:

@@ -2,7 +2,7 @@
 
 **Document Version:** 1.0.0  
 **Status:** Pre-Trial Protocol Specification (No model trials have been conducted)  
-**Task Scope:** T01 (Retry Semantics), T02 (Pagination Authority), T03 (Tenant Idempotency)
+**Task Scope:** T01 (Retry Semantics), T02 (Pagination Authority), T03 (Tenant Idempotency), T04 (Split-Tender Refund Allocation)
 
 ---
 
@@ -14,7 +14,7 @@ The primary experimental variable across all tasks is the **matched-pair delta**
 $$\Delta = \text{PassRate}(\text{Variant B}) - \text{PassRate}(\text{Variant A})$$
 
 - **Variant A (Control):** Establishes baseline code synthesis capability under conventional semantics or consistent inline guidance.
-- **Variant B (Treatment):** Tests contract adherence when requirements depart from common convention (T01), conflict with legacy starter code comments (T02), or require multi-clause semantic composition (T03).
+- **Variant B (Treatment):** Tests contract adherence when requirements depart from common convention (T01), conflict with legacy starter code comments (T02), require multi-clause semantic composition (T03), or leave consequential business policies undefined (T04).
 
 ---
 

@@ -58,3 +58,40 @@ def redact_secrets(text: str, secrets: list[str] | None = None) -> str:
 
     return redacted
 
+
+def load_dotenv(dotenv_path: str | os.PathLike[str] | None = None) -> dict[str, str]:
+    """Load key-value pairs from a .env file into os.environ if not already present.
+
+    Uses pure Python standard library only (no external dependencies).
+    """
+    from pathlib import Path
+
+    target_path: Path
+    if dotenv_path is None:
+        target_path = Path.cwd() / ".env"
+    else:
+        target_path = Path(dotenv_path)
+
+    if not target_path.is_file():
+        return {}
+
+    loaded: dict[str, str] = {}
+    try:
+        content = target_path.read_text(encoding="utf-8")
+    except Exception:
+        return {}
+
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            key, val = line.split("=", 1)
+            key = key.strip()
+            val = val.strip().strip("'\"")
+            if key and key not in os.environ:
+                os.environ[key] = val
+                loaded[key] = val
+
+    return loaded
+

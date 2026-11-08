@@ -37,6 +37,16 @@ class MalformedResponseError(ProviderError):
     pass
 
 
+class PricingVerificationError(ProviderError):
+    """Raised when dynamic pricing verification fails or cannot prove zero cost."""
+    pass
+
+
+class ModelMismatchError(ProviderError):
+    """Raised when the provider returns an unexpected model ID or unauthorized substitution."""
+    pass
+
+
 @dataclass(frozen=True)
 class ChatMessage:
     """A single chat message in a completion request."""
@@ -91,6 +101,8 @@ class CompletionResponse:
     cost_usd: float | None = 0.0
     latency_seconds: float = 0.0
     finish_reason: str = "stop"
+    pricing_evidence: dict[str, object] = field(default_factory=dict)
+    routing_metadata: dict[str, object] = field(default_factory=dict)
     raw_response: dict[str, object] = field(default_factory=dict)
 
 

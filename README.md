@@ -12,6 +12,7 @@
 
 Atavism is a research-grade software engineering evaluation benchmark built for the **micro1 Eval Hackathon** hosted on HackerRank. It evaluates whether AI coding models reliably interpret and implement explicit software specifications when those specifications conflict with familiar programming conventions, contradict nearby informal implementation guidance, compose interacting technical constraints, handle incomplete policies without guessing, or maintain state invariants over asynchronous event streams.
 
+#### Atavism Video Walkthrough Link : https://drive.google.com/file/d/1qrGYZuZfDwbmOfOuLl8VJdl2Y53N_vF8/view?usp=sharing
 ---
 
 ## Table of Contents
